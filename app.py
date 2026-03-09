@@ -1,38 +1,60 @@
 import streamlit as st
 import pandas as pd
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 import requests
+import json
+import os
+
+ARQUIVO_DADOS = "dados.json"
+
+# --- FUNÇÕES DE BANCO DE DADOS (SALVAR EM ARQUIVO LOCAL) ---
+def carregar_dados():
+    if os.path.exists(ARQUIVO_DADOS):
+        with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return {
+            "ordens_servico": [],
+            "materiais_disponiveis": [
+                "Lâmpada 70w vapor de sódio",
+                "Lâmpada 250w vapor de sódio",
+                "Lâmpada 400w vapor de sódio",
+                "Lâmpada 250w vapor metálico",
+                "Lâmpada 400w vapor metálico",
+                "Luminária led 100w",
+                "Luminária led 150w",
+                "Reator 70w",
+                "Reator 250w",
+                "Reator 400w",
+                "Base de relé",
+                "Relé fotoelétrico",
+                "Relé fotoelétrico para grupo"
+            ]
+        }
+
+def salvar_dados():
+    dados = {
+        "ordens_servico": st.session_state.ordens_servico,
+        "materiais_disponiveis": st.session_state.materiais_disponiveis
+    }
+    with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Gestão de Iluminação Pública", layout="wide")
 
-# --- INICIALIZAÇÃO DOS DADOS (SIMULANDO BANCO DE DADOS) ---
-if 'ordens_servico' not in st.session_state:
-    st.session_state.ordens_servico = []
+# --- INICIALIZAÇÃO DOS DADOS REAIS ---
+if 'dados_carregados' not in st.session_state:
+    dados_iniciais = carregar_dados()
+    st.session_state.ordens_servico = dados_iniciais["ordens_servico"]
+    st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
+    st.session_state.dados_carregados = True
 
-if 'materiais_disponiveis' not in st.session_state:
-    st.session_state.materiais_disponiveis = [
-        "Lâmpada 70w vapor de sódio",
-        "Lâmpada 250w vapor de sódio",
-        "Lâmpada 400w vapor de sódio",
-        "Lâmpada 250w vapor metálico",
-        "Lâmpada 400w vapor metálico",
-        "Luminária led 100w",
-        "Luminária led 150w",
-        "Reator 70w",
-        "Reator 250w",
-        "Reator 400w",
-        "Base de relé",
-        "Relé fotoelétrico",
-        "Relé fotoelétrico para grupo"
-    ]
-
-# Variáveis temporárias para a busca de CEP
-if 'end_logradouro' not in st.session_state: st.session_state.end_logradouro = ""
-if 'end_bairro' not in st.session_state: st.session_state.end_bairro = ""
-if 'end_cidade' not in st.session_state: st.session_state.end_cidade = ""
-if 'end_uf' not in st.session_state: st.session_state.end_uf = ""
+# Variáveis temporárias
+for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']:
+    if campo not in st.session_state: 
+        st.session_state[campo] = ""
 
 # --- FUNÇÃO PARA BUSCAR CEP ---
 def buscar_cep(cep):
@@ -67,13 +89,13 @@ aba_cidadao, aba_gerencia, aba_tecnico, aba_prefeitura = st.tabs([
 # ==========================================
 with aba_cidadao:
     st.header("Registrar Problema na Iluminação")
-    
     st.subheader("1. Endereço do Problema")
+    
     col_cep, col_btn = st.columns([2, 1])
     with col_cep:
         cep_input = st.text_input("Digite o CEP:")
     with col_btn:
-        st.write("") # Espaçamento
+        st.write("")
         st.write("")
         if st.button("Buscar CEP"):
             if buscar_cep(cep_input):
@@ -81,7 +103,6 @@ with aba_cidadao:
             else:
                 st.error("CEP inválido ou não encontrado.")
 
-    # Campos de endereço (preenchidos automaticamente se o CEP for válido)
     logradouro = st.text_input("Rua/Avenida:", value=st.session_state.end_logradouro)
     col_num, col_comp, col_bairro = st.columns([1, 1, 2])
     with col_num:
@@ -106,16 +127,17 @@ with aba_cidadao:
                 "endereco": endereco_completo,
                 "problema": tipo_problema,
                 "descricao": descricao,
-                "status": "Aguardando Despacho", # Vai para a gerência primeiro
-                "materiais": []
+                "status": "Aguardando Despacho",
+                "materiais": [],
+                "prazo": "Não definido"
             }
             st.session_state.ordens_servico.append(nova_os)
+            salvar_dados()
+            
             st.success(f"Solicitação enviada! O número do seu protocolo é: **{nova_os['os']}**")
-            # Limpa os campos temporários
-            st.session_state.end_logradouro = ""
-            st.session_state.end_bairro = ""
-            st.session_state.end_cidade = ""
-            st.session_state.end_uf = ""
+            
+            for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']:
+                st.session_state[campo] = ""
         else:
             st.warning("Preencha ao menos a Rua e o Número antes de enviar.")
 
@@ -125,38 +147,52 @@ with aba_cidadao:
 with aba_gerencia:
     st.header("Gestão de Chamados e Estoque")
     
-    col_chamados, col_estoque = st.columns(2)
+    # Divide a tela em 2 colunas: 75% para os chamados, 25% para o menu lateral
+    col_chamados, col_lateral = st.columns([3, 1])
     
+    with col_lateral:
+        # Menu Suspenso (Expander) para cadastro de materiais na lateral
+        with st.expander("📦 Gerenciar Materiais", expanded=False):
+            st.write("Estoque atual:")
+            st.dataframe(pd.DataFrame(st.session_state.materiais_disponiveis, columns=["Materiais"]), hide_index=True)
+            
+            st.write("---")
+            novo_material = st.text_input("Novo material:")
+            if st.button("Adicionar"):
+                if novo_material and novo_material not in st.session_state.materiais_disponiveis:
+                    st.session_state.materiais_disponiveis.append(novo_material)
+                    salvar_dados()
+                    st.success("Adicionado!")
+                    st.rerun()
+                else:
+                    st.warning("Já existe ou vazio.")
+
     with col_chamados:
-        st.subheader("Chamados Novos (Aguardando Despacho)")
+        st.subheader("🚨 Chamados Aguardando Despacho")
         chamados_novos = [os for os in st.session_state.ordens_servico if os['status'] == "Aguardando Despacho"]
         
         if not chamados_novos:
             st.info("Nenhum chamado novo aguardando triagem.")
         else:
-            for os in chamados_novos:
-                with st.expander(f"OS: {os['os']} - {os['problema']}"):
-                    st.write(f"**Endereço:** {os['endereco']}")
-                    st.write(f"**Descrição do Munícipe:** {os['descricao']}")
+            for os_item in chamados_novos:
+                with st.expander(f"OS: {os_item['os']} - {os_item['problema']} (Criado em: {os_item['data']})"):
+                    st.write(f"**Endereço:** {os_item['endereco']}")
+                    st.write(f"**Descrição do Munícipe:** {os_item['descricao']}")
                     
-                    if st.button(f"Despachar OS {os['os']} para a Equipe Técnica"):
-                        os['status'] = "Enviada ao Técnico"
-                        st.success("Ordem de Serviço enviada ao técnico com sucesso!")
+                    st.write("---")
+                    # Campo para definir o prazo de atendimento
+                    prazo_selecionado = st.date_input(
+                        "Defina o Prazo Limite para o Técnico:", 
+                        min_value=date.today(),
+                        key=f"prazo_{os_item['os']}"
+                    )
+                    
+                    if st.button(f"Enviar para o Técnico", key=f"btn_{os_item['os']}"):
+                        os_item['status'] = "Enviada ao Técnico"
+                        os_item['prazo'] = prazo_selecionado.strftime("%d/%m/%Y")
+                        salvar_dados()
+                        st.success("Enviada com sucesso!")
                         st.rerun()
-
-    with col_estoque:
-        st.subheader("Cadastrar Novos Materiais")
-        st.write("Materiais atualmente no sistema:")
-        st.dataframe(pd.DataFrame(st.session_state.materiais_disponiveis, columns=["Material Exigido/Cadastrado"]), hide_index=True)
-        
-        novo_material = st.text_input("Nome do novo material:")
-        if st.button("Adicionar Material"):
-            if novo_material and novo_material not in st.session_state.materiais_disponiveis:
-                st.session_state.materiais_disponiveis.append(novo_material)
-                st.success(f"Material '{novo_material}' cadastrado com sucesso!")
-                st.rerun()
-            else:
-                st.warning("Material já existe ou campo está vazio.")
 
 # ==========================================
 # ABA 3: VISÃO DO TÉCNICO (MANUTENÇÃO)
@@ -164,29 +200,29 @@ with aba_gerencia:
 with aba_tecnico:
     st.header("Ordens de Serviço do Técnico")
     
-    # O técnico só vê o que a gerência despachou ou o que ele já começou
     os_tecnico = [os for os in st.session_state.ordens_servico if os['status'] in ["Enviada ao Técnico", "Em Andamento"]]
     
+    # Ordenar os chamados dos mais antigos (urgentes) para os mais novos
+    os_tecnico.sort(key=lambda x: datetime.strptime(x['data'], "%d/%m/%Y %H:%M"))
+    
     if not os_tecnico:
-        st.info("Nenhuma ordem de serviço pendente para as equipes de rua!")
+        st.info("Nenhuma ordem de serviço pendente para a equipe de rua!")
     else:
-        for os in os_tecnico:
-            with st.expander(f"OS: {os['os']} ({os['status']}) - {os['problema']}"):
-                st.write(f"**Endereço:** {os['endereco']}")
-                st.write(f"**Problema Relatado:** {os['descricao']}")
+        for os_item in os_tecnico:
+            with st.expander(f"OS: {os_item['os']} ({os_item['status']}) - {os_item['problema']}"):
+                st.write(f"**Data da Solicitação:** {os_item['data']}")
+                st.write(f"**Endereço:** {os_item['endereco']}")
+                st.write(f"**Problema Relatado:** {os_item['descricao']}")
                 
-                with st.form(f"form_tecnico_{os['os']}"):
-                    novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os['status']=="Enviada ao Técnico" else 1)
+                # Destaca o prazo limite
+                prazo_texto = os_item.get('prazo', 'Não definido')
+                st.error(f"⚠️ **PRAZO LIMITE PARA CONCLUSÃO:** {prazo_texto}")
+                
+                with st.form(f"form_tecnico_{os_item['os']}"):
+                    novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1)
                     
                     st.write("---")
-                    st.write("**Materiais Utilizados no Reparo:**")
-                    # Seleção de materiais da lista dinâmica
-                    materiais_selecionados = st.multiselect(
-                        "Selecione os materiais (pode escolher vários):", 
-                        st.session_state.materiais_disponiveis
-                    )
-                    
-                    # Se ele selecionou materiais, pede a quantidade de cada um
+                    materiais_selecionados = st.multiselect("Materiais Utilizados:", st.session_state.materiais_disponiveis)
                     quantidades_usadas = {}
                     if materiais_selecionados:
                         for mat in materiais_selecionados:
@@ -195,36 +231,55 @@ with aba_tecnico:
                     
                     obs_tecnico = st.text_area("Observações do Técnico:")
                     
-                    submit_baixa = st.form_submit_button("Salvar Apontamento do Técnico")
+                    submit_baixa = st.form_submit_button("Salvar Apontamento")
                     if submit_baixa:
-                        os['status'] = novo_status
-                        # Salva a lista de materiais formatada
-                        lista_final_materiais = [f"{qtd}x {mat}" for mat, qtd in quantidades_usadas.items()]
-                        os['materiais'] = lista_final_materiais
-                        if obs_tecnico:
-                            os['obs_tecnico'] = obs_tecnico
+                        os_item['status'] = novo_status
+                        os_item['materiais'] = [f"{qtd}x {mat}" for mat, qtd in quantidades_usadas.items()]
+                        if obs_tecnico: os_item['obs_tecnico'] = obs_tecnico
                             
-                        st.success("Apontamento salvo com sucesso!")
+                        salvar_dados()
+                        st.success("Apontamento salvo!")
                         st.rerun()
 
 # ==========================================
 # ABA 4: VISÃO DA PREFEITURA (DASHBOARD)
 # ==========================================
 with aba_prefeitura:
-    st.header("Painel de Gestão Geral (Transparência)")
+    st.header("Painel de Gestão e Monitoramento de Prazos")
+    
+    # --- SISTEMA DE ALERTA DE ATRASOS ---
+    hoje_str = date.today().strftime("%d/%m/%Y")
+    hoje_dt = datetime.strptime(hoje_str, "%d/%m/%Y")
+    
+    os_atrasadas = []
+    for os_item in st.session_state.ordens_servico:
+        if os_item['status'] not in ["Concluída", "Aguardando Despacho"]:
+            prazo_str = os_item.get('prazo', '')
+            if prazo_str and prazo_str != "Não definido":
+                prazo_dt = datetime.strptime(prazo_str, "%d/%m/%Y")
+                if hoje_dt > prazo_dt:
+                    os_atrasadas.append(os_item)
+    
+    if len(os_atrasadas) > 0:
+        st.error(f"⚠️ ATENÇÃO: Existem {len(os_atrasadas)} ordem(ns) de serviço com o PRAZO DE ATENDIMENTO VENCIDO!")
+        for atraso in os_atrasadas:
+            st.warning(f"OS: {atraso['os']} | Endereço: {atraso['endereco']} | Prazo era: **{atraso['prazo']}**")
+    else:
+        st.success("✅ Excelente! Todos os chamados com as equipes técnicas estão dentro do prazo.")
+    
+    st.write("---")
     
     if st.session_state.ordens_servico:
         df_os = pd.DataFrame(st.session_state.ordens_servico)
         
-        # Cria métricas rápidas
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         col_m1.metric("Total de Chamados", len(df_os))
         col_m2.metric("Aguardando Gerência", len(df_os[df_os['status'] == 'Aguardando Despacho']))
         col_m3.metric("Com a Equipe Técnica", len(df_os[df_os['status'].isin(['Enviada ao Técnico', 'Em Andamento'])]))
         col_m4.metric("Serviços Concluídos", len(df_os[df_os['status'] == 'Concluída']))
         
-        st.write("---")
-        st.subheader("Histórico Completo de Serviços")
-        st.dataframe(df_os[['os', 'data', 'endereco', 'problema', 'status', 'materiais']], use_container_width=True)
+        st.subheader("Histórico Completo")
+        # Mostrar o DataFrame ordenado (mais recentes primeiro)
+        st.dataframe(df_os[['os', 'data', 'prazo', 'endereco', 'problema', 'status']], use_container_width=True)
     else:
-        st.write("Nenhuma OS registrada no sistema até o momento.")
+        st.write("Nenhuma OS registrada.")

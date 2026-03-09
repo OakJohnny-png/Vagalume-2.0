@@ -74,9 +74,21 @@ def buscar_cep(cep):
     return False
 
 # --- TÍTULO DO APP ---
-st.markdown("# 💡 Sistema Vagalume")
-st.markdown("#### *Sistema de gestão de iluminação pública*")
+st.markdown(
+    """
+    <div>
+        <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
+            💡 Sistema Vagalume
+        </h1>
+        <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #555;">
+            Sistema de gestão de iluminação pública
+        </h4>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 st.write("") # Dá um pequeno espaço antes das abas
+
 
 
 # --- CRIAÇÃO DAS ABAS ---

@@ -178,7 +178,7 @@ with aba_cidadao:
     
     st.markdown("*Campos com (*) são obrigatórios.*")
     
-        if st.button("Enviar Solicitação para a Prefeitura", type="primary"):
+    if st.button("Enviar Solicitação para a Prefeitura", type="primary"):
         
         # 1. Cria uma lista vazia e verifica campo por campo
         campos_vazios = []

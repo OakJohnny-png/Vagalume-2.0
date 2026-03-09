@@ -59,7 +59,7 @@ def get_logo_html():
             
         # CSS atualizado para imagens largas (1008x260)
         # width: 100% (ocupa a tela toda no celular)
-        # max-width: 450px (trava o crescimento no monitor do PC)
+        # max-width: 1008px (trava o crescimento no monitor do PC)
         # height: auto (mantém a proporção exata sem achatar)
         img_html = f'<img src="data:image/png;base64,{encoded_string}" style="width: 100%; max-width: 450px; height: auto; display: block; margin: 0 auto 15px auto;">'
     return img_html

@@ -304,11 +304,31 @@ def render_prefeitura():
 # GESTOR DE TELAS (ROTEAMENTO)
 # ==========================================
 
-# CABEÇALHO PADRÃO DO APP (Com a logo personalizada)
+# CABEÇALHO PADRÃO DO APP (Agora com Navbar no topo)
 if st.session_state.page == 'app':
+    
+    # 1. NAVBAR SUPERIOR
+    col_nav_texto, col_nav_btn = st.columns([8, 2])
+    with col_nav_texto:
+        # Texto indicativo de quem está usando o sistema
+        if st.session_state.user_role == 'cidadao':
+            st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div style='padding-top: 10px; color: #666;'>🔒 <b>Usuário Logado:</b> {st.session_state.user_role.capitalize()}</div>", unsafe_allow_html=True)
+            
+    with col_nav_btn:
+        # Botão de sair alinhado à direita
+        if st.button("Sair / Voltar", type="secondary", use_container_width=True):
+            st.session_state.page = 'home'
+            st.session_state.user_role = None
+            st.rerun()
+            
+    st.divider() # Cria uma linha fina separando a navbar do restante da página
+
+    # 2. LOGO E TÍTULO PRINCIPAL (Abaixo da Navbar)
     st.markdown(
         f"""
-        <div style="text-align: center;">
+        <div style="text-align: center; margin-bottom: 25px;">
             {get_logo_html()}
             <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
                 💡 Sistema Vagalume
@@ -320,13 +340,6 @@ if st.session_state.page == 'app':
         """, 
         unsafe_allow_html=True
     )
-    col_vazia, col_sair = st.columns([8, 2])
-    with col_sair:
-        if st.button("Sair / Voltar", use_container_width=True):
-            st.session_state.page = 'home'
-            st.session_state.user_role = None
-            st.rerun()
-    st.write("---")
 
     # CARREGA AS TELAS DEPENDENDO DO NÍVEL DE ACESSO
     if st.session_state.user_role == 'cidadao':
@@ -341,7 +354,6 @@ if st.session_state.page == 'app':
         with aba_2: render_gerencia()
         with aba_3: render_tecnico()
         with aba_4: render_prefeitura()
-
 # TELA 1: HOME (PRÉ-ABA)
 elif st.session_state.page == 'home':
     st.markdown(

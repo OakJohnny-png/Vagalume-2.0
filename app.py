@@ -55,30 +55,34 @@ def get_logo_html():
     if os.path.exists("logo.png"):
         with open("logo.png", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-        # O CSS garante que a imagem não passe de 120px de altura e se adapte à largura
         img_html = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 100%; max-height: 120px; object-fit: contain; display: block; margin: 0 auto 10px auto;">'
     return img_html
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Sistema Vagalume - Iluminação Pública", layout="wide")
 
-# --- INICIALIZAÇÃO DOS DADOS REAIS ---
+# --- INICIALIZAÇÃO DOS DADOS E PERSISTÊNCIA DE LOGIN ---
 dados_iniciais = carregar_dados()
 if 'ordens_servico' not in st.session_state: st.session_state.ordens_servico = dados_iniciais["ordens_servico"]
 if 'materiais_disponiveis' not in st.session_state: st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
 if 'usuarios' not in st.session_state: st.session_state.usuarios = dados_iniciais["usuarios"]
-if 'dados_carregados' not in st.session_state: st.session_state.dados_carregados = True
 
-# Controle de Navegação e Login
-if 'page' not in st.session_state: st.session_state.page = 'home'
-if 'user_role' not in st.session_state: st.session_state.user_role = None
+# Verifica se existe um login salvo na URL (Garante que não desloga ao dar F5)
+if 'user_role' not in st.session_state:
+    if 'role' in st.query_params:
+        st.session_state.user_role = st.query_params['role']
+        st.session_state.page = 'app'
+    else:
+        st.session_state.user_role = None
+        st.session_state.page = 'home'
 
-for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']:
+# --- VARIÁVEIS DE ESTADO DO CEP ---
+if 'cep_input' not in st.session_state: st.session_state.cep_input = ""
+for campo in ['end_logradouro', 'end_bairro', 'end_cidade']:
     if campo not in st.session_state: st.session_state[campo] = ""
 
-# --- FUNÇÃO PARA BUSCAR CEP ---
-def buscar_cep(cep):
-    cep = cep.replace("-", "").replace(".", "")
+def buscar_cep():
+    cep = st.session_state.cep_input.replace("-", "").replace(".", "")
     if len(cep) == 8:
         try:
             resposta = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
@@ -87,7 +91,6 @@ def buscar_cep(cep):
                 st.session_state.end_logradouro = dados.get("logradouro", "")
                 st.session_state.end_bairro = dados.get("bairro", "")
                 st.session_state.end_cidade = dados.get("localidade", "")
-                st.session_state.end_uf = dados.get("uf", "")
                 return True
         except: pass
     return False
@@ -98,8 +101,8 @@ def buscar_cep(cep):
 
 def render_cidadao():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 10px;">Registrar Problema na Iluminação</h2>""", unsafe_allow_html=True)
-    st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">1. Dados do Solicitante</h3>""", unsafe_allow_html=True)
     
+    st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">1. Dados do Solicitante</h3>""", unsafe_allow_html=True)
     col_nome, col_cpf = st.columns(2)
     with col_nome: nome_cidadao = st.text_input("Nome Completo*")
     with col_cpf: cpf_cidadao = st.text_input("CPF*")
@@ -109,25 +112,25 @@ def render_cidadao():
     with col_whats: whatsapp_cidadao = st.text_input("WhatsApp (com DDD)*")
 
     st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-top: 20px; margin-bottom: 10px; color: #444;">2. Endereço do Problema</h3>""", unsafe_allow_html=True)
-    
     col_cep, col_btn = st.columns([2, 1])
-    with col_cep: cep_input = st.text_input("Digite o CEP:")
+    with col_cep: 
+        st.text_input("Digite o CEP:", key="cep_input")
     with col_btn:
         st.write(""); st.write("")
         if st.button("Buscar CEP"):
-            if buscar_cep(cep_input): st.success("Endereço encontrado!")
+            if buscar_cep(): st.success("Endereço preenchido!")
             else: st.error("CEP inválido ou não encontrado.")
 
-    logradouro = st.text_input("Rua/Avenida*:", value=st.session_state.end_logradouro)
+    # Agora o text_input lê e salva na variável de estado (key) permitindo o autocompletar
+    logradouro = st.text_input("Rua/Avenida*:", key="end_logradouro")
     col_num, col_comp, col_bairro = st.columns([1, 1, 2])
     with col_num: numero = st.text_input("Número (ou 'S/N')*:")
     with col_comp: complemento = st.text_input("Complemento/Ref:")
-    with col_bairro: bairro = st.text_input("Bairro*:", value=st.session_state.end_bairro)
+    with col_bairro: bairro = st.text_input("Bairro*:", key="end_bairro")
         
-    cidade = st.text_input("Cidade*:", value=st.session_state.end_cidade)
+    cidade = st.text_input("Cidade*:", key="end_cidade")
     
     st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-top: 20px; margin-bottom: 10px; color: #444;">3. Detalhes do Problema</h3>""", unsafe_allow_html=True)
-    
     tipo_problema = st.selectbox("Qual o problema?", ["Lâmpada Apagada à Noite", "Lâmpada Acesa de Dia", "Poste Caído/Danificado", "Luminária Quebrada", "Luz Oscilando"])
     descricao = st.text_area("Descreva o problema com detalhes:")
     
@@ -158,12 +161,16 @@ def render_cidadao():
                 "descricao": descricao,
                 "status": "Aguardando Despacho",
                 "materiais": [],
+                "obs_tecnico": "",
                 "prazo": "Não definido"
             }
             st.session_state.ordens_servico.append(nova_os)
             salvar_dados()
             st.success(f"✅ Solicitação enviada com sucesso! O número do seu protocolo é: **{nova_os['os']}**")
-            for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']: st.session_state[campo] = ""
+            
+            # Limpa os campos após o envio
+            st.session_state.cep_input = ""
+            for campo in ['end_logradouro', 'end_bairro', 'end_cidade']: st.session_state[campo] = ""
         else:
             st.error(f"⚠️ Atenção! Preencha os seguintes campos: **{', '.join(campos_vazios)}**")
 
@@ -179,9 +186,7 @@ def render_gerencia():
             df_users = pd.DataFrame(st.session_state.usuarios)
             df_users['password'] = '******'
             st.dataframe(df_users, hide_index=True)
-            
             st.write("---")
-            st.write("Novo Usuário:")
             new_user = st.text_input("Usuário (Login):")
             new_pass = st.text_input("Senha:", type="password")
             new_role = st.selectbox("Nível de Acesso:", ["tecnico", "prefeitura", "gerencia"])
@@ -194,8 +199,6 @@ def render_gerencia():
                         salvar_dados()
                         st.success("Usuário criado!")
                         st.rerun()
-                else:
-                    st.warning("Preencha login e senha.")
 
         with st.expander("📦 Gerenciar Materiais", expanded=False):
             st.write("Estoque atual:")
@@ -217,10 +220,14 @@ def render_gerencia():
 
         with st.expander("✅ Chamados Concluídos", expanded=False):
             os_concluidas = [os for os in st.session_state.ordens_servico if os['status'] == "Concluída"]
+            if not os_concluidas:
+                st.write("Nenhum chamado concluído ainda.")
             for os_item in os_concluidas:
                 st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
-                st.write(f"**Solicitante:** {os_item.get('nome_solicitante', 'N/D')}")
-                st.write(f"**Endereço:** {os_item['endereco']}")
+                st.write(f"👤 **Solicitante:** {os_item.get('nome_solicitante', 'N/D')}")
+                st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                st.write(f"🛠 **Materiais Usados:** {', '.join(os_item.get('materiais', ['Nenhum']))}")
+                st.write(f"📝 **Nota do Técnico:** {os_item.get('obs_tecnico', 'Sem observações')}")
                 st.write("---")
 
     with col_chamados:
@@ -229,10 +236,8 @@ def render_gerencia():
         if not chamados_novos: 
             st.info("Nenhum chamado novo.")
         else:
-            # Novo layout: Título no Menu Suspenso e botão despachar do lado de fora visível!
             for os_item in chamados_novos:
                 col_expander, col_botao = st.columns([3, 1])
-                
                 with col_expander:
                     with st.expander(f"OS: {os_item['os']} - {os_item['problema']}"):
                         st.write(f"📅 **Aberto em:** {os_item['data']}")
@@ -244,7 +249,6 @@ def render_gerencia():
                 with col_botao:
                     if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary", use_container_width=True):
                         os_item['status'] = "Enviada ao Técnico"
-                        # Garante que salva o prazo escolhido dentro do expander
                         os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
                         salvar_dados()
                         st.rerun()
@@ -263,20 +267,24 @@ def render_tecnico():
                 st.write(f"**Descrição:** {os_item['descricao']}")
                 st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
                 
-                with st.form(f"form_{os_item['os']}"):
-                    novo_status = st.selectbox("Status:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1)
-                    materiais = st.multiselect("Materiais Utilizados:", st.session_state.materiais_disponiveis)
-                    qtds = {}
-                    if materiais:
-                        for mat in materiais: qtds[mat] = st.number_input(f"Qtd '{mat}'", min_value=1, value=1, step=1)
-                    obs = st.text_area("Observações:")
-                    
-                    if st.form_submit_button("Salvar Apontamento"):
-                        os_item['status'] = novo_status
-                        os_item['materiais'] = [f"{q}x {m}" for m, q in qtds.items()]
-                        if obs: os_item['obs_tecnico'] = obs
-                        salvar_dados()
-                        st.rerun()
+                # Formulário removido para que a lista de materiais atualize dinamicamente sem bugar!
+                st.write("---")
+                novo_status = st.selectbox("Status:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
+                
+                materiais_selecionados = st.multiselect("Materiais Utilizados:", st.session_state.materiais_disponiveis, key=f"mat_{os_item['os']}")
+                qtds = {}
+                for mat in materiais_selecionados:
+                    qtds[mat] = st.number_input(f"Qtd '{mat}'", min_value=1, value=1, step=1, key=f"q_{os_item['os']}_{mat}")
+                
+                obs = st.text_area("Observações / Descrição da Atividade:", key=f"obs_{os_item['os']}")
+                
+                if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
+                    os_item['status'] = novo_status
+                    os_item['materiais'] = [f"{qtd}x {m}" for m, qtd in qtds.items()]
+                    if obs: os_item['obs_tecnico'] = obs
+                    salvar_dados()
+                    st.success("Salvo com sucesso!")
+                    st.rerun()
 
 def render_prefeitura():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Painel de Gestão e Monitoramento</h2>""", unsafe_allow_html=True)
@@ -304,31 +312,22 @@ def render_prefeitura():
 # GESTOR DE TELAS (ROTEAMENTO)
 # ==========================================
 
-# CABEÇALHO PADRÃO DO APP (Agora com Navbar no topo)
+# CABEÇALHO PADRÃO DO APP (Aparece após o Login)
 if st.session_state.page == 'app':
     
-    # 1. NAVBAR SUPERIOR
-    col_nav_texto, col_nav_btn = st.columns([8, 2])
-    with col_nav_texto:
-        # Texto indicativo de quem está usando o sistema
-        if st.session_state.user_role == 'cidadao':
-            st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div style='padding-top: 10px; color: #666;'>🔒 <b>Usuário Logado:</b> {st.session_state.user_role.capitalize()}</div>", unsafe_allow_html=True)
-            
+    # 1. NAVBAR - Botão de sair superior direito
+    col_nav_vazia, col_nav_btn = st.columns([8, 2])
     with col_nav_btn:
-        # Botão de sair alinhado à direita
         if st.button("Sair / Voltar", type="secondary", use_container_width=True):
+            st.query_params.clear() # Limpa o login salvo
             st.session_state.page = 'home'
             st.session_state.user_role = None
             st.rerun()
-            
-    st.divider() # Cria uma linha fina separando a navbar do restante da página
 
-    # 2. LOGO E TÍTULO PRINCIPAL (Abaixo da Navbar)
+    # 2. LOGO E TÍTULO PRINCIPAL
     st.markdown(
         f"""
-        <div style="text-align: center; margin-bottom: 25px;">
+        <div style="text-align: center; margin-bottom: 15px; margin-top: -30px;">
             {get_logo_html()}
             <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
                 💡 Sistema Vagalume
@@ -341,63 +340,8 @@ if st.session_state.page == 'app':
         unsafe_allow_html=True
     )
 
-    # CARREGA AS TELAS DEPENDENDO DO NÍVEL DE ACESSO
-    if st.session_state.user_role == 'cidadao':
-        render_cidadao()
-    elif st.session_state.user_role == 'tecnico':
-        render_tecnico()
-    elif st.session_state.user_role == 'prefeitura':
-        render_prefeitura()
-    elif st.session_state.user_role == 'gerencia':
+    # 3. BARRA DE NAVEGAÇÃO DE PÁGINAS (ABAS)
+    if st.session_state.user_role == 'gerencia':
+        # Gerência vê a Navbar completa com todas as abas
         aba_1, aba_2, aba_3, aba_4 = st.tabs(["📱 Cidadão", "🗂️ Gerência", "🛠️ Técnico", "📊 Prefeitura"])
-        with aba_1: render_cidadao()
-        with aba_2: render_gerencia()
-        with aba_3: render_tecnico()
-        with aba_4: render_prefeitura()
-# TELA 1: HOME (PRÉ-ABA)
-elif st.session_state.page == 'home':
-    st.markdown(
-        f"""
-        <div style="text-align: center; padding-top: 5vh; padding-bottom: 5vh;">
-            {get_logo_html() if get_logo_html() else '<img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">'}
-            <h1 style="font-size: clamp(28px, 5vw, 60px); margin: 0;">Sistema Vagalume</h1>
-            <p style="font-size: clamp(14px, 2vw, 22px); color: #666; font-style: italic; margin-top: 5px;">Sistema de gestão de iluminação pública</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("🚨 Cadastrar Problema (Cidadão)", type="primary", use_container_width=True):
-            st.session_state.page = 'app'
-            st.session_state.user_role = 'cidadao'
-            st.rerun()
-        st.write("")
-        if st.button("🔒 Acesso Restrito (Login)", use_container_width=True):
-            st.session_state.page = 'login'
-            st.rerun()
-
-# TELA 2: LOGIN
-elif st.session_state.page == 'login':
-    st.markdown("""<div style="text-align: center; margin-bottom: 30px;"><h2 style="font-size: clamp(24px, 4vw, 40px);">Acesso Restrito</h2></div>""", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("form_login"):
-            usuario = st.text_input("Usuário")
-            senha = st.text_input("Senha", type="password")
-            btn_login = st.form_submit_button("Entrar", use_container_width=True)
-            
-            if btn_login:
-                usuario_valido = None
-                for u in st.session_state.usuarios:
-                    if u['username'] == usuario and u['password'] == senha:
-                        usuario_valido = u
-                        break
-                
-                if usuario_valido:
-                    st.session_state.page = 'app'
-                    st.session_state.user_role = usuario_valido['role']
-                    st.rerun()
-          
+        with aba_1: render_cidadao

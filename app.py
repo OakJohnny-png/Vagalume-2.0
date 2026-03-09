@@ -325,7 +325,7 @@ if st.session_state.page == 'app':
         if st.session_state.user_role == 'cidadao':
             st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
     with col_nav_btn:
-        if st.button("Sair / Voltar", type="secondary", use_container_width=True):
+        if st.button("Sair", type="secondary", use_container_width=True):
             st.query_params.clear() 
             st.session_state.page = 'home'
             st.session_state.user_role = None

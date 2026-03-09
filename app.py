@@ -344,4 +344,65 @@ if st.session_state.page == 'app':
     if st.session_state.user_role == 'gerencia':
         # Gerência vê a Navbar completa com todas as abas
         aba_1, aba_2, aba_3, aba_4 = st.tabs(["📱 Cidadão", "🗂️ Gerência", "🛠️ Técnico", "📊 Prefeitura"])
-        with aba_1: render_cidadao
+        with aba_1: render_cidadao()
+        with aba_2: render_gerencia()
+        with aba_3: render_tecnico()
+        with aba_4: render_prefeitura()
+    elif st.session_state.user_role == 'cidadao':
+        # Cidadão ou Perfis restritos não enxergam as abas da Navbar, só sua tela
+        render_cidadao()
+    elif st.session_state.user_role == 'tecnico':
+        render_tecnico()
+    elif st.session_state.user_role == 'prefeitura':
+        render_prefeitura()
+
+# TELA 1: HOME INICIAL
+elif st.session_state.page == 'home':
+    st.markdown(
+        f"""
+        <div style="text-align: center; padding-top: 5vh; padding-bottom: 5vh;">
+            {get_logo_html() if get_logo_html() else '<img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">'}
+            <h1 style="font-size: clamp(28px, 5vw, 60px); margin: 0;">Sistema Vagalume</h1>
+            <p style="font-size: clamp(14px, 2vw, 22px); color: #666; font-style: italic; margin-top: 5px;">Sistema de gestão de iluminação pública</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚨 Cadastrar Problema (Cidadão)", type="primary", use_container_width=True):
+            st.session_state.page = 'app'
+            st.session_state.user_role = 'cidadao'
+            st.rerun()
+        st.write("")
+        if st.button("🔒 Acesso Restrito (Login)", use_container_width=True):
+            st.session_state.page = 'login'
+            st.rerun()
+
+# TELA 2: LOGIN
+elif st.session_state.page == 'login':
+    st.markdown("""<div style="text-align: center; margin-bottom: 30px;"><h2 style="font-size: clamp(24px, 4vw, 40px);">Acesso Restrito</h2></div>""", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("form_login"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            btn_login = st.form_submit_button("Entrar", use_container_width=True)
+            
+            if btn_login:
+                usuario_valido = None
+                for u in st.session_state.usuarios:
+                    if u['username'] == usuario and u['password'] == senha:
+                        usuario_valido = u
+                        break
+                if usuario_valido:
+                    st.query_params['role'] = usuario_valido['role'] # Salva para não deslogar no F5
+                    st.session_state.page = 'app'
+                    st.session_state.user_role = usuario_valido['role']
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+                    
+        if st.button("Voltar ao Início", use_container_width=True):
+            st.session_state.page = 'home'
+            st.rerun()

@@ -178,9 +178,22 @@ with aba_cidadao:
     
     st.markdown("*Campos com (*) são obrigatórios.*")
     
-    if st.button("Enviar Solicitação para a Prefeitura", type="primary"):
-        # Validação de campos obrigatórios
-        if logradouro and numero and bairro and cidade and nome_cidadao and cpf_cidadao and email_cidadao and whatsapp_cidadao:
+        if st.button("Enviar Solicitação para a Prefeitura", type="primary"):
+        
+        # 1. Cria uma lista vazia e verifica campo por campo
+        campos_vazios = []
+        
+        if not nome_cidadao: campos_vazios.append("Nome Completo")
+        if not cpf_cidadao: campos_vazios.append("CPF")
+        if not email_cidadao: campos_vazios.append("E-mail")
+        if not whatsapp_cidadao: campos_vazios.append("WhatsApp")
+        if not logradouro: campos_vazios.append("Rua/Avenida")
+        if not numero: campos_vazios.append("Número")
+        if not bairro: campos_vazios.append("Bairro")
+        if not cidade: campos_vazios.append("Cidade")
+
+        # 2. Se a lista estiver vazia (tamanho 0), significa que está tudo certo!
+        if len(campos_vazios) == 0:
             endereco_completo = f"{logradouro}, {numero} - {complemento} | Bairro: {bairro} | {cidade}"
             nova_os = {
                 "os": str(uuid.uuid4())[:8].upper(),
@@ -199,13 +212,17 @@ with aba_cidadao:
             st.session_state.ordens_servico.append(nova_os)
             salvar_dados()
             
-            st.success(f"Solicitação enviada! O número do seu protocolo é: **{nova_os['os']}**")
+            st.success(f"✅ Solicitação enviada com sucesso! O número do seu protocolo é: **{nova_os['os']}**")
             
-            # Limpa cache do CEP
+            # Limpa cache do CEP para o próximo chamado
             for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']:
                 st.session_state[campo] = ""
+                
+        # 3. Se faltou algum campo, ele mostra o erro apontando exatamente quais
         else:
-            st.error("⚠️ Preencha todos os campos obrigatórios (*) antes de enviar a solicitação.")
+            campos_formatados = ", ".join(campos_vazios) # Junta os nomes com vírgula
+            st.error(f"⚠️ Atenção! Você esqueceu de preencher os seguintes campos obrigatórios: **{campos_formatados}**")
+
 
 # ==========================================
 # ABA 2: VISÃO DA GERÊNCIA (TRIAGEM E MATERIAIS)

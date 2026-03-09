@@ -52,18 +52,11 @@ def salvar_dados():
 # --- FUNÇÃO PARA RENDERIZAR A LOGO ADAPTATIVA ---
 def get_logo_html():
     img_html = ""
-    # Certifique-se de que a sua nova imagem foi salva no GitHub com este mesmo nome e formato
     if os.path.exists("logo.png"):
         with open("logo.png", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            
-        # CSS atualizado para imagens largas (1008x260)
-        # width: 100% (ocupa a tela toda no celular)
-        # max-width: 1008px (trava o crescimento no monitor do PC)
-        # height: auto (mantém a proporção exata sem achatar)
-        img_html = f'<img src="data:image/png;base64,{encoded_string}" style="width: 100%; max-width: 504px; height: auto; display: block; margin: 0 auto 15px auto;">'
+        img_html = f'<img src="data:image/png;base64,{encoded_string}" style="width: 100%; max-width: 450px; height: auto; display: block; margin: 0 auto 15px auto;">'
     return img_html
-
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Sistema Vagalume - Iluminação Pública", layout="wide")
@@ -280,23 +273,51 @@ def render_tecnico():
                 st.write(f"**Endereço:** {os_item['endereco']}")
                 st.write(f"**Descrição:** {os_item['descricao']}")
                 st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
-                
                 st.write("---")
-                novo_status = st.selectbox("Status:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
                 
-                materiais_selecionados = st.multiselect("Materiais Utilizados:", st.session_state.materiais_disponiveis, key=f"mat_{os_item['os']}")
-                qtds = {}
-                for mat in materiais_selecionados:
-                    qtds[mat] = st.number_input(f"Qtd '{mat}'", min_value=1, value=1, step=1, key=f"q_{os_item['os']}_{mat}")
+                # --- SISTEMA DE CARRINHO DE MATERIAIS ---
+                st.markdown("#### 🛠️ Materiais Utilizados")
                 
-                obs = st.text_area("Observações / Descrição da Atividade:", key=f"obs_{os_item['os']}")
+                # 1. Mostra a lista do que já foi adicionado
+                if not os_item.get('materiais'):
+                    st.info("Nenhum material registrado ainda.")
+                else:
+                    for mat_usado in os_item['materiais']:
+                        st.write(f"- {mat_usado}")
+                    
+                    # Botão caso queira limpar a lista e recomeçar
+                    if st.button("🗑️ Limpar Lista", key=f"limpar_{os_item['os']}"):
+                        os_item['materiais'] = []
+                        salvar_dados()
+                        st.rerun()
+                
+                st.write("")
+                # 2. Formulário para adicionar novos itens um a um
+                col_mat, col_qtd = st.columns([3, 1])
+                with col_mat:
+                    mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")
+                with col_qtd:
+                    qtd_sel = st.number_input("Qtd:", min_value=1, value=1, step=1, key=f"q_{os_item['os']}")
+                
+                if st.button("➕ Adicionar Material", key=f"add_{os_item['os']}"):
+                    if 'materiais' not in os_item:
+                        os_item['materiais'] = []
+                    os_item['materiais'].append(f"{qtd_sel}x {mat_sel}")
+                    salvar_dados()
+                    st.rerun()
+
+                st.write("---")
+                
+                # --- FECHAMENTO DO CHAMADO ---
+                st.markdown("#### 📝 Fechamento da OS")
+                novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
+                obs = st.text_area("Observações / Descrição da Atividade:", value=os_item.get('obs_tecnico', ''), key=f"obs_{os_item['os']}")
                 
                 if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
                     os_item['status'] = novo_status
-                    os_item['materiais'] = [f"{qtd}x {m}" for m, qtd in qtds.items()]
-                    if obs: os_item['obs_tecnico'] = obs
+                    os_item['obs_tecnico'] = obs
                     salvar_dados()
-                    st.success("Salvo com sucesso!")
+                    st.success("Chamado atualizado com sucesso!")
                     st.rerun()
 
 def render_prefeitura():
@@ -332,7 +353,7 @@ if st.session_state.page == 'app':
         if st.session_state.user_role == 'cidadao':
             st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
     with col_nav_btn:
-        if st.button("Sair", type="secondary", use_container_width=True):
+        if st.button("Sair / Voltar", type="secondary", use_container_width=True):
             st.query_params.clear() 
             st.session_state.page = 'home'
             st.session_state.user_role = None

@@ -74,7 +74,10 @@ def buscar_cep(cep):
     return False
 
 # --- TÍTULO DO APP ---
-st.title("💡 Sistema de Gestão de Iluminação Pública - Rio do Sul")
+st.markdown("# 💡 Sistema Vagalume")
+st.markdown("#### *Sistema de gestão de iluminação pública*")
+st.write("") # Dá um pequeno espaço antes das abas
+
 
 # --- CRIAÇÃO DAS ABAS ---
 aba_cidadao, aba_gerencia, aba_tecnico, aba_prefeitura = st.tabs([

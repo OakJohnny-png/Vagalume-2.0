@@ -6,8 +6,29 @@ import requests
 import json
 import os
 import base64
+import unicodedata
 
 ARQUIVO_DADOS = "dados.json"
+
+# --- MAPEAMENTO DE ROTAS E BAIRROS ---
+ROTAS_MAP = {
+    "ROTA 1": ["CENTRO", "JARDIM AMERICA"],
+    "ROTA 2": ["ALBERTINA", "LARANJEIRAS", "BOA VISTA", "EUGENIO SCHNEIDER"],
+    "ROTA 3": ["FUNDO CANOAS", "CANOAS", "PROGRESSO", "PAMPLONA", "CANTA GALO"],
+    "ROTA 4": ["BARRA DO TROMBUDO", "BARRAGEM", "BUDAG", "SUMARE"],
+    "ROTA 5": ["SANTANA", "TABOAO", "BREMER", "BELA ALIANCA"],
+    "ROTA 6": ["BARRA DA ITOUPAVA", "NAVEGANTES", "SANTA RITA", "VALADA ITOUPAVA", "VALADA SAO PAULO", "RAINHA"]
+}
+
+# --- FUNÇÃO PARA DESCOBRIR A ROTA BASEADA NO BAIRRO ---
+def extrair_rota(bairro_texto):
+    if not bairro_texto: return "OUTRAS ROTAS"
+    # Tira acentos e coloca em maiúsculo para comparar sem erro (Ex: "Sumaré" vira "SUMARE")
+    b_norm = ''.join(c for c in unicodedata.normalize('NFD', bairro_texto) if unicodedata.category(c) != 'Mn').upper().strip()
+    for rota, bairros in ROTAS_MAP.items():
+        if any(b in b_norm for b in bairros):
+            return rota
+    return "OUTRAS ROTAS"
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
 def carregar_dados():
@@ -165,6 +186,7 @@ def render_cidadao():
                 "email_solicitante": email_cidadao,
                 "whatsapp_solicitante": whatsapp_cidadao,
                 "endereco": endereco_completo,
+                "bairro": bairro, # Salva o bairro para a triagem inteligente da gerência
                 "problema": tipo_problema,
                 "descricao": descricao,
                 "status": "Aguardando Despacho",
@@ -240,25 +262,54 @@ def render_gerencia():
     with col_chamados:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">🚨 Aguardando Despacho</h3>""", unsafe_allow_html=True)
         chamados_novos = [os for os in st.session_state.ordens_servico if os['status'] == "Aguardando Despacho"]
+        
         if not chamados_novos: 
             st.info("Nenhum chamado novo.")
         else:
+            # AGRUPANDO OS CHAMADOS POR ROTA
+            chamados_agrupados = {}
             for os_item in chamados_novos:
-                col_expander, col_botao = st.columns([3, 1])
-                with col_expander:
-                    with st.expander(f"OS: {os_item['os']} - {os_item['problema']}"):
-                        st.write(f"📅 **Aberto em:** {os_item['data']}")
-                        st.write(f"👤 **Contato:** {os_item.get('whatsapp_solicitante', 'N/D')} ({os_item.get('nome_solicitante', 'N/D')})")
-                        st.write(f"📍 **Endereço:** {os_item['endereco']}")
-                        st.write(f"📝 **Descrição:** {os_item['descricao']}")
-                        prazo_selecionado = st.date_input("Definir Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
+                bairro_os = os_item.get('bairro', '')
+                if not bairro_os and '| Bairro: ' in os_item['endereco']: # Garante o funcionamento de tickets velhos
+                    bairro_os = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
                 
-                with col_botao:
-                    if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary", use_container_width=True):
-                        os_item['status'] = "Enviada ao Técnico"
-                        os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
-                        salvar_dados()
-                        st.rerun()
+                rota_os = extrair_rota(bairro_os)
+                if rota_os not in chamados_agrupados:
+                    chamados_agrupados[rota_os] = []
+                chamados_agrupados[rota_os].append(os_item)
+            
+            # Ordenando as rotas da ROTA 1 a ROTA 6 e jogando "OUTRAS ROTAS" pro final
+            rotas_ordenadas = sorted(chamados_agrupados.keys())
+            if "OUTRAS ROTAS" in rotas_ordenadas:
+                rotas_ordenadas.remove("OUTRAS ROTAS")
+                rotas_ordenadas.append("OUTRAS ROTAS")
+
+            # EXIBINDO OS CHAMADOS SEPARADOS POR ROTA
+            for rota in rotas_ordenadas:
+                st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 20px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+                
+                for os_item in chamados_agrupados[rota]:
+                    col_expander, col_botao = st.columns([3, 1])
+                    
+                    bairro_display = os_item.get('bairro', 'Bairro N/D')
+                    if not bairro_display and '| Bairro: ' in os_item['endereco']:
+                         bairro_display = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
+                         
+                    with col_expander:
+                        # Adicionei o Bairro logo no título do chamado para facilitar visualmente!
+                        with st.expander(f"OS: {os_item['os']} - {bairro_display} ({os_item['problema']})"):
+                            st.write(f"📅 **Aberto em:** {os_item['data']}")
+                            st.write(f"👤 **Contato:** {os_item.get('whatsapp_solicitante', 'N/D')} ({os_item.get('nome_solicitante', 'N/D')})")
+                            st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                            st.write(f"📝 **Descrição:** {os_item['descricao']}")
+                            prazo_selecionado = st.date_input("Definir Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
+                    
+                    with col_botao:
+                        if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary", use_container_width=True):
+                            os_item['status'] = "Enviada ao Técnico"
+                            os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
+                            salvar_dados()
+                            st.rerun()
 
 def render_tecnico():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Ordens de Serviço do Técnico</h2>""", unsafe_allow_html=True)
@@ -273,26 +324,24 @@ def render_tecnico():
                 st.write(f"**Endereço:** {os_item['endereco']}")
                 st.write(f"**Descrição:** {os_item['descricao']}")
                 st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
+                
                 st.write("---")
                 
                 # --- SISTEMA DE CARRINHO DE MATERIAIS ---
                 st.markdown("#### 🛠️ Materiais Utilizados")
                 
-                # 1. Mostra a lista do que já foi adicionado
                 if not os_item.get('materiais'):
-                    st.info("Nenhum material registrado ainda.")
+                    st.info("Nenhum material adicionado ainda.")
                 else:
                     for mat_usado in os_item['materiais']:
                         st.write(f"- {mat_usado}")
                     
-                    # Botão caso queira limpar a lista e recomeçar
-                    if st.button("🗑️ Limpar Lista", key=f"limpar_{os_item['os']}"):
+                    if st.button("🗑️ Limpar Lista de Materiais", key=f"limpar_{os_item['os']}"):
                         os_item['materiais'] = []
                         salvar_dados()
                         st.rerun()
                 
                 st.write("")
-                # 2. Formulário para adicionar novos itens um a um
                 col_mat, col_qtd = st.columns([3, 1])
                 with col_mat:
                     mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")

@@ -52,11 +52,18 @@ def salvar_dados():
 # --- FUNÇÃO PARA RENDERIZAR A LOGO ADAPTATIVA ---
 def get_logo_html():
     img_html = ""
+    # Certifique-se de que a sua nova imagem foi salva no GitHub com este mesmo nome e formato
     if os.path.exists("logo.png"):
         with open("logo.png", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-        img_html = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 100%; max-height: 120px; object-fit: contain; display: block; margin: 0 auto 10px auto;">'
+            
+        # CSS atualizado para imagens largas (1008x260)
+        # width: 100% (ocupa a tela toda no celular)
+        # max-width: 450px (trava o crescimento no monitor do PC)
+        # height: auto (mantém a proporção exata sem achatar)
+        img_html = f'<img src="data:image/png;base64,{encoded_string}" style="width: 100%; max-width: 450px; height: auto; display: block; margin: 0 auto 15px auto;">'
     return img_html
+
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Sistema Vagalume - Iluminação Pública", layout="wide")

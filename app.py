@@ -77,8 +77,8 @@ def buscar_cep(cep):
 st.markdown(
     """
     <div>
-        <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
-            💡 Sistema Vagalume
+        <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 72px); margin-bottom: 0px;">
+           Sistema Vagalume
         </h1>
         <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #555;">
             Sistema de gestão de iluminação pública

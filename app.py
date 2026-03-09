@@ -5,6 +5,7 @@ from datetime import datetime, date
 import requests
 import json
 import os
+import base64
 
 ARQUIVO_DADOS = "dados.json"
 
@@ -13,7 +14,6 @@ def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
         with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
             dados = json.load(f)
-            # Atualiza o banco antigo para receber o sistema de usuários
             if "usuarios" not in dados:
                 dados["usuarios"] = [{"username": "gerencia", "password": "Ameixaseca9988?", "role": "gerencia"}]
             return dados
@@ -49,24 +49,30 @@ def salvar_dados():
     with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
+# --- FUNÇÃO PARA RENDERIZAR A LOGO ADAPTATIVA ---
+def get_logo_html():
+    img_html = ""
+    if os.path.exists("logo.png"):
+        with open("logo.png", "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        # O CSS garante que a imagem não passe de 120px de altura e se adapte à largura
+        img_html = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 100%; max-height: 120px; object-fit: contain; display: block; margin: 0 auto 10px auto;">'
+    return img_html
+
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Sistema Vagalume - Iluminação Pública", layout="wide")
 
 # --- INICIALIZAÇÃO DOS DADOS REAIS ---
 dados_iniciais = carregar_dados()
-if 'ordens_servico' not in st.session_state:
-    st.session_state.ordens_servico = dados_iniciais["ordens_servico"]
-if 'materiais_disponiveis' not in st.session_state:
-    st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
-if 'usuarios' not in st.session_state:
-    st.session_state.usuarios = dados_iniciais["usuarios"]
-
+if 'ordens_servico' not in st.session_state: st.session_state.ordens_servico = dados_iniciais["ordens_servico"]
+if 'materiais_disponiveis' not in st.session_state: st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
+if 'usuarios' not in st.session_state: st.session_state.usuarios = dados_iniciais["usuarios"]
+if 'dados_carregados' not in st.session_state: st.session_state.dados_carregados = True
 
 # Controle de Navegação e Login
 if 'page' not in st.session_state: st.session_state.page = 'home'
 if 'user_role' not in st.session_state: st.session_state.user_role = None
 
-# Variáveis temporárias para a busca de CEP
 for campo in ['end_logradouro', 'end_bairro', 'end_cidade', 'end_uf']:
     if campo not in st.session_state: st.session_state[campo] = ""
 
@@ -171,7 +177,6 @@ def render_gerencia():
         with st.expander("👥 Gerenciar Usuários", expanded=False):
             st.write("Usuários Atuais:")
             df_users = pd.DataFrame(st.session_state.usuarios)
-            # Esconde a senha por segurança visual no dataframe
             df_users['password'] = '******'
             st.dataframe(df_users, hide_index=True)
             
@@ -182,7 +187,6 @@ def render_gerencia():
             new_role = st.selectbox("Nível de Acesso:", ["tecnico", "prefeitura", "gerencia"])
             if st.button("Cadastrar Usuário"):
                 if new_user and new_pass:
-                    # Verifica se já existe
                     if any(u['username'] == new_user for u in st.session_state.usuarios):
                         st.error("Usuário já existe!")
                     else:
@@ -222,25 +226,28 @@ def render_gerencia():
     with col_chamados:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">🚨 Aguardando Despacho</h3>""", unsafe_allow_html=True)
         chamados_novos = [os for os in st.session_state.ordens_servico if os['status'] == "Aguardando Despacho"]
-        if not chamados_novos: st.info("Nenhum chamado novo.")
+        if not chamados_novos: 
+            st.info("Nenhum chamado novo.")
         else:
+            # Novo layout: Título no Menu Suspenso e botão despachar do lado de fora visível!
             for os_item in chamados_novos:
-                with st.container():
-                    st.markdown(f"#### OS: {os_item['os']} - {os_item['problema']}")
-                    st.write(f"📅 **Aberto em:** {os_item['data']} | 👤 **Contato:** {os_item.get('whatsapp_solicitante', 'N/D')}")
-                    st.write(f"📍 **Endereço:** {os_item['endereco']}")
-                    st.write(f"📝 **Descrição:** {os_item['descricao']}")
-                    
-                    col_prazo, col_btn = st.columns([2, 1])
-                    with col_prazo: prazo_selecionado = st.date_input("Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
-                    with col_btn:
-                        st.write(""); st.write("")
-                        if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary"):
-                            os_item['status'] = "Enviada ao Técnico"
-                            os_item['prazo'] = prazo_selecionado.strftime("%d/%m/%Y")
-                            salvar_dados()
-                            st.rerun()
-                    st.divider()
+                col_expander, col_botao = st.columns([3, 1])
+                
+                with col_expander:
+                    with st.expander(f"OS: {os_item['os']} - {os_item['problema']}"):
+                        st.write(f"📅 **Aberto em:** {os_item['data']}")
+                        st.write(f"👤 **Contato:** {os_item.get('whatsapp_solicitante', 'N/D')} ({os_item.get('nome_solicitante', 'N/D')})")
+                        st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                        st.write(f"📝 **Descrição:** {os_item['descricao']}")
+                        prazo_selecionado = st.date_input("Definir Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
+                
+                with col_botao:
+                    if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary", use_container_width=True):
+                        os_item['status'] = "Enviada ao Técnico"
+                        # Garante que salva o prazo escolhido dentro do expander
+                        os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
+                        salvar_dados()
+                        st.rerun()
 
 def render_tecnico():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Ordens de Serviço do Técnico</h2>""", unsafe_allow_html=True)
@@ -297,11 +304,12 @@ def render_prefeitura():
 # GESTOR DE TELAS (ROTEAMENTO)
 # ==========================================
 
-# CABEÇALHO PADRÃO DO APP (Aparece se estiver logado ou na aba cidadão)
+# CABEÇALHO PADRÃO DO APP (Com a logo personalizada)
 if st.session_state.page == 'app':
     st.markdown(
-        """
-        <div>
+        f"""
+        <div style="text-align: center;">
+            {get_logo_html()}
             <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
                 💡 Sistema Vagalume
             </h1>
@@ -336,11 +344,10 @@ if st.session_state.page == 'app':
 
 # TELA 1: HOME (PRÉ-ABA)
 elif st.session_state.page == 'home':
-    # Imagem adaptativa (um ícone de lâmpada limpo e moderno via URL pública)
     st.markdown(
-        """
+        f"""
         <div style="text-align: center; padding-top: 5vh; padding-bottom: 5vh;">
-            <img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">
+            {get_logo_html() if get_logo_html() else '<img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">'}
             <h1 style="font-size: clamp(28px, 5vw, 60px); margin: 0;">Sistema Vagalume</h1>
             <p style="font-size: clamp(14px, 2vw, 22px); color: #666; font-style: italic; margin-top: 5px;">Sistema de gestão de iluminação pública</p>
         </div>
@@ -371,7 +378,6 @@ elif st.session_state.page == 'login':
             btn_login = st.form_submit_button("Entrar", use_container_width=True)
             
             if btn_login:
-                # Verifica na lista de usuários cadastrados
                 usuario_valido = None
                 for u in st.session_state.usuarios:
                     if u['username'] == usuario and u['password'] == senha:
@@ -382,9 +388,4 @@ elif st.session_state.page == 'login':
                     st.session_state.page = 'app'
                     st.session_state.user_role = usuario_valido['role']
                     st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos.")
-                    
-        if st.button("Voltar ao Início", use_container_width=True):
-            st.session_state.page = 'home'
-            st.rerun()
+          

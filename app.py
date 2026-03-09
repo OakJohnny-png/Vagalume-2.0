@@ -103,12 +103,29 @@ aba_cidadao, aba_gerencia, aba_tecnico, aba_prefeitura = st.tabs([
 # ABA 1: VISÃO DO CIDADÃO (SOLICITAÇÕES)
 # ==========================================
 with aba_cidadao:
-    st.header("Registrar Problema na Iluminação")
     
-    # 1. Dados do Solicitante (Novidade)
-    st.subheader("1. Dados do Solicitante")
+    # Título Principal da Aba
+    st.markdown(
+        """
+        <h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 10px;">
+            Registrar Problema na Iluminação
+        </h2>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    # 1. Dados do Solicitante
+    st.markdown(
+        """
+        <h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">
+            1. Dados do Solicitante
+        </h3>
+        """, 
+        unsafe_allow_html=True
+    )
+    
     col_nome, col_cpf = st.columns(2)
-    with col_nome:
+
         nome_cidadao = st.text_input("Nome Completo*")
     with col_cpf:
         cpf_cidadao = st.text_input("CPF*")

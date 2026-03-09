@@ -80,7 +80,7 @@ st.markdown(
         <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 72px); margin-bottom: 0px;">
            Sistema Vagalume
         </h1>
-        <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #555;">
+        <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #260ceb;">
             Sistema de gestão de iluminação pública
         </h4>
     </div>

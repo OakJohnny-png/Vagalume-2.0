@@ -53,12 +53,14 @@ def salvar_dados():
 st.set_page_config(page_title="Sistema Vagalume - Iluminação Pública", layout="wide")
 
 # --- INICIALIZAÇÃO DOS DADOS REAIS ---
-if 'dados_carregados' not in st.session_state:
-    dados_iniciais = carregar_dados()
+dados_iniciais = carregar_dados()
+if 'ordens_servico' not in st.session_state:
     st.session_state.ordens_servico = dados_iniciais["ordens_servico"]
+if 'materiais_disponiveis' not in st.session_state:
     st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
+if 'usuarios' not in st.session_state:
     st.session_state.usuarios = dados_iniciais["usuarios"]
-    st.session_state.dados_carregados = True
+
 
 # Controle de Navegação e Login
 if 'page' not in st.session_state: st.session_state.page = 'home'

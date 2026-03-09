@@ -98,8 +98,17 @@ def buscar_cep():
 # ==========================================
 # MÓDULOS (TELAS) DO SISTEMA
 # ==========================================
-
 def render_cidadao():
+    # --- LÓGICA DE SUCESSO E LIMPEZA DE FORMULÁRIO (NOVO) ---
+    # Ao recarregar a tela, ele limpa os dados antes de desenhar os campos para não dar erro
+    if st.session_state.get('chamado_enviado'):
+        st.success(f"✅ Solicitação enviada com sucesso! O número do protocolo é: *{st.session_state.ultimo_protocolo}*")
+        st.session_state.cep_input = ""
+        for campo in ['end_logradouro', 'end_bairro', 'end_cidade']: 
+            st.session_state[campo] = ""
+        st.session_state.chamado_enviado = False
+    # --------------------------------------------------------
+
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 10px;">Registrar Problema na Iluminação</h2>""", unsafe_allow_html=True)
     
     st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">1. Dados do Solicitante</h3>""", unsafe_allow_html=True)
@@ -121,7 +130,6 @@ def render_cidadao():
             if buscar_cep(): st.success("Endereço preenchido!")
             else: st.error("CEP inválido ou não encontrado.")
 
-    # Agora o text_input lê e salva na variável de estado (key) permitindo o autocompletar
     logradouro = st.text_input("Rua/Avenida*:", key="end_logradouro")
     col_num, col_comp, col_bairro = st.columns([1, 1, 2])
     with col_num: numero = st.text_input("Número (ou 'S/N')*:")
@@ -134,7 +142,7 @@ def render_cidadao():
     tipo_problema = st.selectbox("Qual o problema?", ["Lâmpada Apagada à Noite", "Lâmpada Acesa de Dia", "Poste Caído/Danificado", "Luminária Quebrada", "Luz Oscilando"])
     descricao = st.text_area("Descreva o problema com detalhes:")
     
-    st.markdown("*Campos com (*) são obrigatórios.*")
+    st.markdown("Campos com () são obrigatórios.*")
     
     if st.button("Enviar Solicitação para a Prefeitura", type="primary"):
         campos_vazios = []
@@ -166,13 +174,13 @@ def render_cidadao():
             }
             st.session_state.ordens_servico.append(nova_os)
             salvar_dados()
-            st.success(f"✅ Solicitação enviada com sucesso! O número do seu protocolo é: **{nova_os['os']}**")
             
-            # Limpa os campos após o envio
-            st.session_state.cep_input = ""
-            for campo in ['end_logradouro', 'end_bairro', 'end_cidade']: st.session_state[campo] = ""
+            # ATIVA A BANDEIRA DE SUCESSO E RECARREGA A PÁGINA
+            st.session_state.ultimo_protocolo = nova_os['os']
+            st.session_state.chamado_enviado = True
+            st.rerun()
         else:
-            st.error(f"⚠️ Atenção! Preencha os seguintes campos: **{', '.join(campos_vazios)}**")
+            st.error(f"⚠️ Atenção! Preencha os seguintes campos: *{', '.join(campos_vazios)}*")
 
 def render_gerencia():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Gestão de Chamados, Estoque e Usuários</h2>""", unsafe_allow_html=True)

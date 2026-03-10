@@ -209,7 +209,6 @@ def render_gerencia():
     with col_lateral:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">⚙️ Menu da Gerência</h3>""", unsafe_allow_html=True)
         
-        # --- NOVO MENU: IMPORTAR PLANILHA ---
         with st.expander("📂 Importar Planilha (Lote)", expanded=False):
             st.write("Suba uma planilha Excel para criar chamados automaticamente.")
             arquivo_excel = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx", "xls"])
@@ -217,24 +216,22 @@ def render_gerencia():
                 if st.button("Processar e Gerar Chamados", type="primary"):
                     try:
                         df_import = pd.read_excel(arquivo_excel)
-                        colunas_originais = df_import.columns.tolist()
-                        df_import.columns = df_import.columns.str.upper().str.strip()
+                        
+                        # A MÁGICA ESTÁ AQUI: Convertendo colunas para texto para evitar o erro do "float"
+                        df_import.columns = df_import.columns.astype(str).str.upper().str.strip()
                         colunas_upper = df_import.columns.tolist()
                         
-                        # Mapeamento inteligente de colunas
                         col_bairro = next((c for c in colunas_upper if 'BAIRRO' in c), None)
                         col_end = next((c for c in colunas_upper if 'ENDERE' in c or 'RUA' in c or 'LOGRAD' in c), None)
                         col_prob = next((c for c in colunas_upper if 'PROBLEM' in c or 'TIPO' in c or 'SERVI' in c), None)
                         col_desc = next((c for c in colunas_upper if 'DESCRI' in c or 'OBS' in c or 'DETALHE' in c), None)
                         col_status = next((c for c in colunas_upper if 'STATUS' in c or 'SITUA' in c), None)
                         
-                        # Filtra apenas chamados Abertos (se a coluna existir)
                         if col_status:
                             df_import = df_import[df_import[col_status].astype(str).str.contains("ABERTO|PENDENTE", case=False, na=False)]
                             
                         chamados_criados = 0
                         for _, row in df_import.iterrows():
-                            # Coleta os dados lidando com nulos
                             bairro_val = str(row[col_bairro]).title() if col_bairro and pd.notna(row[col_bairro]) else "Não informado"
                             end_val = str(row[col_end]) if col_end and pd.notna(row[col_end]) else "Endereço não informado"
                             prob_val = str(row[col_prob]).title() if col_prob and pd.notna(row[col_prob]) else "Manutenção Importada"
@@ -371,169 +368,4 @@ def render_tecnico():
     
     if not os_tecnico: st.info("Nenhuma ordem de serviço pendente!")
     else:
-        for os_item in os_tecnico:
-            with st.expander(f"OS: {os_item['os']} ({os_item['status']}) - {os_item['problema']}"):
-                st.write(f"**Data:** {os_item['data']}")
-                st.write(f"**Endereço:** {os_item['endereco']}")
-                st.write(f"**Descrição:** {os_item['descricao']}")
-                st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
-                
-                st.write("---")
-                st.markdown("#### 🛠️ Materiais Utilizados")
-                
-                if not os_item.get('materiais'):
-                    st.info("Nenhum material adicionado ainda.")
-                else:
-                    for mat_usado in os_item['materiais']:
-                        st.write(f"- {mat_usado}")
-                    
-                    if st.button("🗑️ Limpar Lista de Materiais", key=f"limpar_{os_item['os']}"):
-                        os_item['materiais'] = []
-                        salvar_dados()
-                        st.rerun()
-                
-                st.write("")
-                col_mat, col_qtd = st.columns([3, 1])
-                with col_mat:
-                    mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")
-                with col_qtd:
-                    qtd_sel = st.number_input("Qtd:", min_value=1, value=1, step=1, key=f"q_{os_item['os']}")
-                
-                if st.button("➕ Adicionar Material", key=f"add_{os_item['os']}"):
-                    if 'materiais' not in os_item:
-                        os_item['materiais'] = []
-                    os_item['materiais'].append(f"{qtd_sel}x {mat_sel}")
-                    salvar_dados()
-                    st.rerun()
-
-                st.write("---")
-                st.markdown("#### 📝 Fechamento da OS")
-                novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
-                obs = st.text_area("Observações / Descrição da Atividade:", value=os_item.get('obs_tecnico', ''), key=f"obs_{os_item['os']}")
-                
-                if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
-                    os_item['status'] = novo_status
-                    os_item['obs_tecnico'] = obs
-                    salvar_dados()
-                    st.success("Chamado atualizado com sucesso!")
-                    st.rerun()
-
-def render_prefeitura():
-    st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Painel de Gestão e Monitoramento</h2>""", unsafe_allow_html=True)
-    hoje_dt = datetime.strptime(date.today().strftime("%d/%m/%Y"), "%d/%m/%Y")
-    
-    os_atrasadas = [os for os in st.session_state.ordens_servico if os['status'] not in ["Concluída", "Aguardando Despacho"] and os.get('prazo') and os.get('prazo') != "Não definido" and hoje_dt > datetime.strptime(os.get('prazo'), "%d/%m/%Y")]
-    
-    if os_atrasadas: st.error(f"⚠️ ATENÇÃO: {len(os_atrasadas)} OS com PRAZO VENCIDO!")
-    else: st.success("✅ Todos os chamados técnicos estão dentro do prazo.")
-    
-    st.write("---")
-    if st.session_state.ordens_servico:
-        df_os = pd.DataFrame(st.session_state.ordens_servico)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total de Chamados", len(df_os))
-        c2.metric("Aguardando Gerência", len(df_os[df_os['status'] == 'Aguardando Despacho']))
-        c3.metric("Com a Equipe", len(df_os[df_os['status'].isin(['Enviada ao Técnico', 'Em Andamento'])]))
-        c4.metric("Serviços Concluídos", len(df_os[df_os['status'] == 'Concluída']))
-        
-        st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-top: 20px; margin-bottom: 10px; color: #444;">Histórico Completo</h3>""", unsafe_allow_html=True)
-        st.dataframe(df_os[['os', 'data', 'prazo', 'endereco', 'problema', 'status']], use_container_width=True)
-
-# ==========================================
-# GESTOR DE TELAS (ROTEAMENTO)
-# ==========================================
-
-if st.session_state.page == 'app':
-    
-    col_nav_texto, col_nav_btn = st.columns([8, 2])
-    with col_nav_texto:
-        if st.session_state.user_role == 'cidadao':
-            st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
-    with col_nav_btn:
-        if st.button("Sair / Voltar", type="secondary", use_container_width=True):
-            st.query_params.clear() 
-            st.session_state.page = 'home'
-            st.session_state.user_role = None
-            st.rerun()
-            
-    st.divider()
-
-    st.markdown(
-        f"""
-        <div style="text-align: center; margin-bottom: 15px; margin-top: -30px;">
-            {get_logo_html()}
-            <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
-                💡 Sistema Vagalume
-            </h1>
-            <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #555;">
-                Sistema de gestão de iluminação pública
-            </h4>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-
-    if st.session_state.user_role == 'gerencia':
-        aba_1, aba_2, aba_3, aba_4 = st.tabs(["📱 Cidadão", "🗂️ Gerência", "🛠️ Técnico", "📊 Prefeitura"])
-        with aba_1: render_cidadao()
-        with aba_2: render_gerencia()
-        with aba_3: render_tecnico()
-        with aba_4: render_prefeitura()
-    elif st.session_state.user_role == 'cidadao':
-        render_cidadao()
-    elif st.session_state.user_role == 'tecnico':
-        render_tecnico()
-    elif st.session_state.user_role == 'prefeitura':
-        render_prefeitura()
-
-elif st.session_state.page == 'home':
-    col_login, col_vazia = st.columns([1, 4])
-    with col_login:
-        if st.button("🔒 Acesso Restrito", use_container_width=True):
-            st.session_state.page = 'login'
-            st.rerun()
-            
-    st.markdown(
-        f"""
-        <div style="text-align: center; padding-top: 2vh; padding-bottom: 5vh;">
-            {get_logo_html() if get_logo_html() else '<img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">'}
-            <h1 style="font-size: clamp(28px, 5vw, 60px); margin: 0;">Sistema Vagalume</h1>
-            <p style="font-size: clamp(14px, 2vw, 22px); color: #666; font-style: italic; margin-top: 5px;">Sistema de gestão de iluminação pública</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("🚨 Cadastrar Problema (Cidadão)", type="primary", use_container_width=True):
-            st.session_state.page = 'app'
-            st.session_state.user_role = 'cidadao'
-            st.rerun()
-
-elif st.session_state.page == 'login':
-    st.markdown("""<div style="text-align: center; margin-bottom: 30px;"><h2 style="font-size: clamp(24px, 4vw, 40px);">Acesso Restrito</h2></div>""", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("form_login"):
-            usuario = st.text_input("Usuário")
-            senha = st.text_input("Senha", type="password")
-            btn_login = st.form_submit_button("Entrar", use_container_width=True)
-            
-            if btn_login:
-                usuario_valido = None
-                for u in st.session_state.usuarios:
-                    if u['username'] == usuario and u['password'] == senha:
-                        usuario_valido = u
-                        break
-                if usuario_valido:
-                    st.query_params['role'] = usuario_valido['role'] 
-                    st.session_state.page = 'app'
-                    st.session_state.user_role = usuario_valido['role']
-                    st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos.")
-                    
-        if st.button("Voltar ao Início", use_container_width=True):
-            st.session_state.page = 'home'
-            st.rerun()
+        fo

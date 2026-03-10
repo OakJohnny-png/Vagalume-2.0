@@ -209,6 +209,64 @@ def render_gerencia():
     with col_lateral:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">⚙️ Menu da Gerência</h3>""", unsafe_allow_html=True)
         
+        # --- NOVO MENU: IMPORTAR PLANILHA ---
+        with st.expander("📂 Importar Planilha (Lote)", expanded=False):
+            st.write("Suba uma planilha Excel para criar chamados automaticamente.")
+            arquivo_excel = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx", "xls"])
+            if arquivo_excel is not None:
+                if st.button("Processar e Gerar Chamados", type="primary"):
+                    try:
+                        df_import = pd.read_excel(arquivo_excel)
+                        colunas_originais = df_import.columns.tolist()
+                        df_import.columns = df_import.columns.str.upper().str.strip()
+                        colunas_upper = df_import.columns.tolist()
+                        
+                        # Mapeamento inteligente de colunas
+                        col_bairro = next((c for c in colunas_upper if 'BAIRRO' in c), None)
+                        col_end = next((c for c in colunas_upper if 'ENDERE' in c or 'RUA' in c or 'LOGRAD' in c), None)
+                        col_prob = next((c for c in colunas_upper if 'PROBLEM' in c or 'TIPO' in c or 'SERVI' in c), None)
+                        col_desc = next((c for c in colunas_upper if 'DESCRI' in c or 'OBS' in c or 'DETALHE' in c), None)
+                        col_status = next((c for c in colunas_upper if 'STATUS' in c or 'SITUA' in c), None)
+                        
+                        # Filtra apenas chamados Abertos (se a coluna existir)
+                        if col_status:
+                            df_import = df_import[df_import[col_status].astype(str).str.contains("ABERTO|PENDENTE", case=False, na=False)]
+                            
+                        chamados_criados = 0
+                        for _, row in df_import.iterrows():
+                            # Coleta os dados lidando com nulos
+                            bairro_val = str(row[col_bairro]).title() if col_bairro and pd.notna(row[col_bairro]) else "Não informado"
+                            end_val = str(row[col_end]) if col_end and pd.notna(row[col_end]) else "Endereço não informado"
+                            prob_val = str(row[col_prob]).title() if col_prob and pd.notna(row[col_prob]) else "Manutenção Importada"
+                            desc_val = str(row[col_desc]) if col_desc and pd.notna(row[col_desc]) else "Gerado via importação de planilha."
+                            
+                            if bairro_val.lower() == 'nan': bairro_val = "Não informado"
+                            if end_val.lower() == 'nan': end_val = "Endereço não informado"
+                            
+                            nova_os = {
+                                "os": str(uuid.uuid4())[:8].upper(),
+                                "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                "nome_solicitante": "SISTEMA",
+                                "cpf_solicitante": "SISTEMA",
+                                "email_solicitante": "SISTEMA",
+                                "whatsapp_solicitante": "SISTEMA",
+                                "endereco": f"{end_val} | Bairro: {bairro_val}",
+                                "bairro": bairro_val,
+                                "problema": prob_val,
+                                "descricao": desc_val,
+                                "status": "Aguardando Despacho",
+                                "materiais": [],
+                                "obs_tecnico": "",
+                                "prazo": "Não definido"
+                            }
+                            st.session_state.ordens_servico.append(nova_os)
+                            chamados_criados += 1
+                            
+                        salvar_dados()
+                        st.success(f"✅ {chamados_criados} chamados importados com sucesso!")
+                    except Exception as e:
+                        st.error(f"Erro ao ler a planilha: {e}")
+
         with st.expander("👥 Gerenciar Usuários", expanded=False):
             st.write("Usuários Atuais:")
             df_users = pd.DataFrame(st.session_state.usuarios)
@@ -429,14 +487,12 @@ if st.session_state.page == 'app':
         render_prefeitura()
 
 elif st.session_state.page == 'home':
-    # --- NOVO LAYOUT DA HOME (LOGIN NO CANTO SUPERIOR ESQUERDO) ---
-    col_login, col_vazia = st.columns([1, 4]) # 1/5 do tamanho da tela
+    col_login, col_vazia = st.columns([1, 4])
     with col_login:
         if st.button("🔒 Acesso Restrito", use_container_width=True):
             st.session_state.page = 'login'
             st.rerun()
             
-    # Logo e Título
     st.markdown(
         f"""
         <div style="text-align: center; padding-top: 2vh; padding-bottom: 5vh;">
@@ -448,7 +504,6 @@ elif st.session_state.page == 'home':
         unsafe_allow_html=True
     )
     
-    # Botão Central do Cidadão
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🚨 Cadastrar Problema (Cidadão)", type="primary", use_container_width=True):

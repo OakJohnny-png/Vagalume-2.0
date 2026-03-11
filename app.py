@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 import pandas as pd
 import uuid
@@ -40,7 +38,7 @@ def carregar_dados():
                     dados["usuarios"] = [{"username": "gerencia", "password": "Ameixaseca9988?", "role": "gerencia"}]
                 return dados
         except:
-            pass # Se o arquivo corromper, recria do zero abaixo
+            pass 
             
     return {
         "ordens_servico": [],
@@ -204,59 +202,73 @@ def render_gerencia():
     with col_lateral:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">⚙️ Menu da Gerência</h3>""", unsafe_allow_html=True)
         
-        with st.expander("📂 Importar Planilha (Lote)", expanded=False):
-            st.write("Suba uma planilha Excel para criar chamados automaticamente.")
-            arquivo_excel = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx", "xls"])
+        # --- NOVO IMPORTADOR DE PLANILHAS (ABAS COMO BAIRROS) ---
+        with st.expander("📂 Importar Planilha (Por Abas)", expanded=False):
+            st.write("Suba sua planilha onde cada ABA é um Bairro.")
+            ano_sel = st.number_input("Ano das Pendências:", value=datetime.now().year, step=1)
+            arquivo_excel = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+            
             if arquivo_excel is not None:
-                if st.button("Processar e Gerar Chamados", type="primary"):
-                    try:
-                        df_import = pd.read_excel(arquivo_excel)
-                        
-                        df_import.columns = df_import.columns.astype(str).str.upper().str.strip()
-                        colunas_upper = df_import.columns.tolist()
-                        
-                        col_bairro = next((c for c in colunas_upper if 'BAIRRO' in c), None)
-                        col_end = next((c for c in colunas_upper if 'ENDERE' in c or 'RUA' in c or 'LOGRAD' in c), None)
-                        col_prob = next((c for c in colunas_upper if 'PROBLEM' in c or 'TIPO' in c or 'SERVI' in c), None)
-                        col_desc = next((c for c in colunas_upper if 'DESCRI' in c or 'OBS' in c or 'DETALHE' in c), None)
-                        col_status = next((c for c in colunas_upper if 'STATUS' in c or 'SITUA' in c), None)
-                        
-                        if col_status:
-                            df_import = df_import[df_import[col_status].astype(str).str.contains("ABERTO|PENDENTE", case=False, na=False)]
+                if st.button("🚀 Processar e Gerar Chamados", type="primary"):
+                    with st.spinner('Lendo abas e filtrando pendências...'):
+                        try:
+                            # Constantes das colunas baseadas na sua lógica
+                            COL_DATA = 7      # Coluna H
+                            COL_PROBLEMA = 1  # Coluna B
+                            COL_STATUS = 3    # Coluna D
                             
-                        chamados_criados = 0
-                        for _, row in df_import.iterrows():
-                            bairro_val = str(row[col_bairro]).title() if col_bairro and pd.notna(row[col_bairro]) else "Não informado"
-                            end_val = str(row[col_end]) if col_end and pd.notna(row[col_end]) else "Endereço não informado"
-                            prob_val = str(row[col_prob]).title() if col_prob and pd.notna(row[col_prob]) else "Manutenção Importada"
-                            desc_val = str(row[col_desc]) if col_desc and pd.notna(row[col_desc]) else "Gerado via importação de planilha."
+                            xls = pd.read_excel(arquivo_excel, sheet_name=None, header=None)
+                            abas_disponiveis = {nome.strip().upper(): nome for nome in xls.keys()}
                             
-                            if bairro_val.lower() == 'nan': bairro_val = "Não informado"
-                            if end_val.lower() == 'nan': end_val = "Endereço não informado"
-                            
-                            nova_os = {
-                                "os": str(uuid.uuid4())[:8].upper(),
-                                "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                                "nome_solicitante": "SISTEMA",
-                                "cpf_solicitante": "SISTEMA",
-                                "email_solicitante": "SISTEMA",
-                                "whatsapp_solicitante": "SISTEMA",
-                                "endereco": f"{end_val} | Bairro: {bairro_val}",
-                                "bairro": bairro_val,
-                                "problema": prob_val,
-                                "descricao": desc_val,
-                                "status": "Aguardando Despacho",
-                                "materiais": [],
-                                "obs_tecnico": "",
-                                "prazo": "Não definido"
-                            }
-                            st.session_state.ordens_servico.append(nova_os)
-                            chamados_criados += 1
-                            
-                        salvar_dados()
-                        st.success(f"✅ {chamados_criados} chamados importados com sucesso!")
-                    except Exception as e:
-                        st.error(f"Erro ao ler a planilha: {e}")
+                            chamados_criados = 0
+
+                            for route, neighborhoods in ROTAS_MAP.items():
+                                for neighborhood in neighborhoods:
+                                    nome_upper = neighborhood.upper()
+                                    if nome_upper in abas_disponiveis:
+                                        df = xls[abas_disponiveis[nome_upper]].copy()
+                                        if df.shape[1] <= COL_DATA: continue
+
+                                        # Filtro de Data e Status
+                                        df[COL_DATA] = pd.to_datetime(df[COL_DATA], errors='coerce')
+                                        mask = (
+                                            (df[COL_DATA].dt.year == ano_sel) & 
+                                            (df[COL_STATUS].astype(str).str.strip().str.upper().isin(['NÃO REALIZADO', 'NÃO EXECUTADO', 'NAO REALIZADO', 'NAO EXECUTADO']))
+                                        )
+                                        
+                                        linhas_pendentes = df[mask]
+                                        
+                                        for _, row in linhas_pendentes.iterrows():
+                                            prob_val = str(row[COL_PROBLEMA]).title() if pd.notna(row[COL_PROBLEMA]) else "Manutenção Importada"
+                                            
+                                            nova_os = {
+                                                "os": str(uuid.uuid4())[:8].upper(),
+                                                "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                                "nome_solicitante": "SISTEMA",
+                                                "cpf_solicitante": "SISTEMA",
+                                                "email_solicitante": "SISTEMA",
+                                                "whatsapp_solicitante": "SISTEMA",
+                                                "endereco": f"Endereço não detalhado na planilha | Bairro: {neighborhood}",
+                                                "bairro": neighborhood,
+                                                "problema": prob_val,
+                                                "descricao": f"Chamado importado automaticamente da planilha (Aba: {neighborhood}).",
+                                                "status": "Aguardando Despacho",
+                                                "materiais": [],
+                                                "obs_tecnico": "",
+                                                "prazo": "Não definido"
+                                            }
+                                            st.session_state.ordens_servico.append(nova_os)
+                                            chamados_criados += 1
+                                            
+                            if chamados_criados > 0:
+                                salvar_dados()
+                                st.success(f"✅ {chamados_criados} chamados importados com sucesso!")
+                                st.rerun()
+                            else:
+                                st.warning(f"Nenhuma pendência encontrada para o ano de {ano_sel} nas abas mapeadas.")
+
+                        except Exception as e:
+                            st.error(f"Erro ao ler a planilha: {e}")
 
         with st.expander("👥 Gerenciar Usuários", expanded=False):
             st.write("Usuários Atuais:")

@@ -562,7 +562,7 @@ if st.session_state.page == 'app':
     col_nav_texto, col_nav_btn = st.columns([8, 2])
     with col_nav_texto:
         if st.session_state.user_role == 'cidadao':
-            st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding-top: 5px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
     with col_nav_btn:
         if st.button("Sair / Voltar", type="secondary", use_container_width=True):
             st.query_params.clear() 

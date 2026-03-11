@@ -43,6 +43,7 @@ def carregar_dados():
     return {
         "ordens_servico": [],
         "materiais_disponiveis": [
+            "Nenhum material (Apenas ajuste/vistoria)",
             "Lâmpada 70w vapor de sódio",
             "Lâmpada 250w vapor de sódio",
             "Lâmpada 400w vapor de sódio",
@@ -80,6 +81,10 @@ if 'ordens_servico' not in st.session_state: st.session_state.ordens_servico = d
 if 'materiais_disponiveis' not in st.session_state: st.session_state.materiais_disponiveis = dados_iniciais["materiais_disponiveis"]
 if 'usuarios' not in st.session_state: st.session_state.usuarios = dados_iniciais["usuarios"]
 if 'form_key' not in st.session_state: st.session_state.form_key = 0
+
+# Garante que o material de ajuste/vistoria sempre exista nas opções para o técnico não travar
+if "Nenhum material (Apenas ajuste/vistoria)" not in st.session_state.materiais_disponiveis:
+    st.session_state.materiais_disponiveis.insert(0, "Nenhum material (Apenas ajuste/vistoria)")
 
 if 'user_role' not in st.session_state:
     if 'role' in st.query_params:
@@ -202,7 +207,6 @@ def render_gerencia():
     with col_lateral:
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">⚙️ Menu da Gerência</h3>""", unsafe_allow_html=True)
         
-        # --- NOVO IMPORTADOR DE PLANILHAS (ABAS COMO BAIRROS) ---
         with st.expander("📂 Importar Planilha (Por Abas)", expanded=False):
             st.write("Suba sua planilha onde cada ABA é um Bairro.")
             ano_sel = st.number_input("Ano das Pendências:", value=datetime.now().year, step=1)
@@ -212,7 +216,6 @@ def render_gerencia():
                 if st.button("🚀 Processar e Gerar Chamados", type="primary"):
                     with st.spinner('Lendo abas e filtrando pendências...'):
                         try:
-                            # Constantes das colunas baseadas na sua lógica
                             COL_DATA = 7      # Coluna H
                             COL_PROBLEMA = 1  # Coluna B
                             COL_STATUS = 3    # Coluna D
@@ -229,7 +232,6 @@ def render_gerencia():
                                         df = xls[abas_disponiveis[nome_upper]].copy()
                                         if df.shape[1] <= COL_DATA: continue
 
-                                        # Filtro de Data e Status
                                         df[COL_DATA] = pd.to_datetime(df[COL_DATA], errors='coerce')
                                         mask = (
                                             (df[COL_DATA].dt.year == ano_sel) & 
@@ -303,8 +305,15 @@ def render_gerencia():
         with st.expander("📋 Chamados em Andamento", expanded=False):
             os_andamento = [os for os in st.session_state.ordens_servico if os['status'] in ["Enviada ao Técnico", "Em Andamento"]]
             for os_item in os_andamento:
-                st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
-                st.caption(f"Prazo: {os_item.get('prazo', 'N/D')} | Status: {os_item['status']}")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
+                    st.caption(f"Prazo: {os_item.get('prazo', 'N/D')} | Status: {os_item['status']}")
+                with col2:
+                    if st.button("🗑️ Excluir", key=f"del_and_{os_item['os']}", use_container_width=True):
+                        st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                        salvar_dados()
+                        st.rerun()
                 st.write("---")
 
         with st.expander("✅ Chamados Concluídos", expanded=False):
@@ -312,11 +321,17 @@ def render_gerencia():
             if not os_concluidas:
                 st.write("Nenhum chamado concluído ainda.")
             for os_item in os_concluidas:
-                st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
-                st.write(f"👤 **Solicitante:** {os_item.get('nome_solicitante', 'N/D')}")
-                st.write(f"📍 **Endereço:** {os_item['endereco']}")
-                st.write(f"🛠 **Materiais Usados:** {', '.join(os_item.get('materiais', ['Nenhum']))}")
-                st.write(f"📝 **Nota do Técnico:** {os_item.get('obs_tecnico', 'Sem observações')}")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
+                    st.write(f"👤 **Solicitante:** {os_item.get('nome_solicitante', 'N/D')}")
+                    st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                    st.write(f"🛠 **Materiais Usados:** {', '.join(os_item.get('materiais', ['Nenhum']))}")
+                with col2:
+                    if st.button("🗑️ Excluir", key=f"del_concl_{os_item['os']}", use_container_width=True):
+                        st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                        salvar_dados()
+                        st.rerun()
                 st.write("---")
 
     with col_chamados:
@@ -343,8 +358,22 @@ def render_gerencia():
                 rotas_ordenadas.append("OUTRAS ROTAS")
 
             for rota in rotas_ordenadas:
-                st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 20px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+                # Cabeçalho da Rota com o Botão de Despachar a Rota Inteira
+                col_titulo, col_data_rota, col_btn_rota = st.columns([3, 2, 2])
+                with col_titulo:
+                    st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 15px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+                with col_data_rota:
+                    prazo_rota = st.date_input("Prazo p/ Rota:", min_value=date.today(), key=f"prazo_rota_{rota}")
+                with col_btn_rota:
+                    st.write("") # Alinhamento
+                    if st.button(f"🚀 Despachar {rota}", use_container_width=True, type="primary", key=f"despachar_todas_{rota}"):
+                        for os_item in chamados_agrupados[rota]:
+                            os_item['status'] = "Enviada ao Técnico"
+                            os_item['prazo'] = prazo_rota.strftime("%d/%m/%Y")
+                        salvar_dados()
+                        st.rerun()
                 
+                # Lista de chamados da Rota
                 for os_item in chamados_agrupados[rota]:
                     col_expander, col_botao = st.columns([3, 1])
                     
@@ -361,65 +390,107 @@ def render_gerencia():
                             prazo_selecionado = st.date_input("Definir Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
                     
                     with col_botao:
-                        if st.button("Despachar", key=f"btn_{os_item['os']}", type="primary", use_container_width=True):
+                        if st.button("Despachar", key=f"btn_{os_item['os']}", use_container_width=True):
                             os_item['status'] = "Enviada ao Técnico"
                             os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
+                            salvar_dados()
+                            st.rerun()
+                        # Botão de Excluir para a Gerência
+                        if st.button("🗑️ Excluir", key=f"del_novo_{os_item['os']}", use_container_width=True):
+                            st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
                             salvar_dados()
                             st.rerun()
 
 def render_tecnico():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Ordens de Serviço do Técnico</h2>""", unsafe_allow_html=True)
     os_tecnico = [os for os in st.session_state.ordens_servico if os['status'] in ["Enviada ao Técnico", "Em Andamento"]]
-    os_tecnico.sort(key=lambda x: datetime.strptime(x['data'], "%d/%m/%Y %H:%M"))
     
-    if not os_tecnico: st.info("Nenhuma ordem de serviço pendente!")
+    if not os_tecnico: 
+        st.info("Nenhuma ordem de serviço pendente!")
     else:
+        # AGRUPAMENTO POR ROTAS NA ABA DO TÉCNICO
+        chamados_agrupados_tec = {}
         for os_item in os_tecnico:
-            with st.expander(f"OS: {os_item['os']} ({os_item['status']}) - {os_item['problema']}"):
-                st.write(f"**Data:** {os_item['data']}")
-                st.write(f"**Endereço:** {os_item['endereco']}")
-                st.write(f"**Descrição:** {os_item['descricao']}")
-                st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
-                
-                st.write("---")
-                st.markdown("#### 🛠️ Materiais Utilizados")
-                
-                if not os_item.get('materiais'):
-                    st.info("Nenhum material adicionado ainda.")
-                else:
-                    for mat_usado in os_item['materiais']:
-                        st.write(f"- {mat_usado}")
+            bairro_os = os_item.get('bairro', '')
+            if not bairro_os and '| Bairro: ' in os_item['endereco']: 
+                bairro_os = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
+            
+            rota_os = extrair_rota(bairro_os)
+            if rota_os not in chamados_agrupados_tec:
+                chamados_agrupados_tec[rota_os] = []
+            chamados_agrupados_tec[rota_os].append(os_item)
+        
+        rotas_ordenadas_tec = sorted(chamados_agrupados_tec.keys())
+        if "OUTRAS ROTAS" in rotas_ordenadas_tec:
+            rotas_ordenadas_tec.remove("OUTRAS ROTAS")
+            rotas_ordenadas_tec.append("OUTRAS ROTAS")
+
+        for rota in rotas_ordenadas_tec:
+            st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 20px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+            
+            chamados_da_rota = sorted(chamados_agrupados_tec[rota], key=lambda x: datetime.strptime(x['data'], "%d/%m/%Y %H:%M"))
+            
+            for os_item in chamados_da_rota:
+                with st.expander(f"OS: {os_item['os']} ({os_item['status']}) - {os_item.get('bairro', 'Bairro N/D')} - {os_item['problema']}"):
+                    st.write(f"**Data:** {os_item['data']}")
+                    st.write(f"**Endereço:** {os_item['endereco']}")
+                    st.write(f"**Descrição:** {os_item['descricao']}")
+                    st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
                     
-                    if st.button("🗑️ Limpar Lista de Materiais", key=f"limpar_{os_item['os']}"):
-                        os_item['materiais'] = []
+                    st.write("---")
+                    st.markdown("#### 🛠️ Materiais Utilizados")
+                    
+                    if not os_item.get('materiais'):
+                        st.info("Nenhum material adicionado ainda.")
+                    else:
+                        for mat_usado in os_item['materiais']:
+                            st.write(f"- {mat_usado}")
+                        
+                        if st.button("🗑️ Limpar Lista de Materiais", key=f"limpar_{os_item['os']}"):
+                            os_item['materiais'] = []
+                            salvar_dados()
+                            st.rerun()
+                    
+                    st.write("")
+                    col_mat, col_qtd = st.columns([3, 1])
+                    with col_mat:
+                        mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")
+                    with col_qtd:
+                        qtd_sel = st.number_input("Qtd:", min_value=1, value=1, step=1, key=f"q_{os_item['os']}")
+                    
+                    if st.button("➕ Adicionar Material", key=f"add_{os_item['os']}"):
+                        if 'materiais' not in os_item:
+                            os_item['materiais'] = []
+                        os_item['materiais'].append(f"{qtd_sel}x {mat_sel}")
                         salvar_dados()
                         st.rerun()
-                
-                st.write("")
-                col_mat, col_qtd = st.columns([3, 1])
-                with col_mat:
-                    mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")
-                with col_qtd:
-                    qtd_sel = st.number_input("Qtd:", min_value=1, value=1, step=1, key=f"q_{os_item['os']}")
-                
-                if st.button("➕ Adicionar Material", key=f"add_{os_item['os']}"):
-                    if 'materiais' not in os_item:
-                        os_item['materiais'] = []
-                    os_item['materiais'].append(f"{qtd_sel}x {mat_sel}")
-                    salvar_dados()
-                    st.rerun()
 
-                st.write("---")
-                st.markdown("#### 📝 Fechamento da OS")
-                novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
-                obs = st.text_area("Observações / Descrição da Atividade:", value=os_item.get('obs_tecnico', ''), key=f"obs_{os_item['os']}")
-                
-                if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
-                    os_item['status'] = novo_status
-                    os_item['obs_tecnico'] = obs
-                    salvar_dados()
-                    st.success("Chamado atualizado com sucesso!")
-                    st.rerun()
+                    st.write("---")
+                    st.markdown("#### 📝 Fechamento da OS")
+                    novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
+                    obs = st.text_area("Observações / Descrição da Atividade:", value=os_item.get('obs_tecnico', ''), key=f"obs_{os_item['os']}")
+                    
+                    col_salvar, col_excluir = st.columns([3, 1])
+                    
+                    with col_salvar:
+                        if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
+                            # TRAVA DE MATERIAIS OBRIGATÓRIOS
+                            if novo_status == "Concluída" and not os_item.get('materiais'):
+                                st.error("⚠️ Para concluir a OS, é obrigatório registrar o material utilizado (ou selecionar 'Nenhum material' na lista)!")
+                            else:
+                                os_item['status'] = novo_status
+                                os_item['obs_tecnico'] = obs
+                                salvar_dados()
+                                st.success("Chamado atualizado com sucesso!")
+                                st.rerun()
+                    
+                    with col_excluir:
+                        # Botão de excluir APENAS visível para Gerência
+                        if st.session_state.user_role == 'gerencia':
+                            if st.button("🗑️ Excluir OS", key=f"del_tec_{os_item['os']}", type="secondary"):
+                                st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                                salvar_dados()
+                                st.rerun()
 
 def render_prefeitura():
     st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Painel de Gestão e Monitoramento</h2>""", unsafe_allow_html=True)

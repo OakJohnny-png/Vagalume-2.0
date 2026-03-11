@@ -42,12 +42,10 @@ def gerar_numero_os(bairro_texto):
     if not bairro_texto: bairro_texto = "INDEFINIDO"
     b_norm = ''.join(c for c in unicodedata.normalize('NFD', bairro_texto) if unicodedata.category(c) != 'Mn').upper().strip()
     
-    # Descobre o número da rota
     rota_extenso = extrair_rota(b_norm)
     num_rota = "".join([s for s in rota_extenso if s.isdigit()])
-    if not num_rota: num_rota = "0" # Caso caia em "OUTRAS ROTAS"
+    if not num_rota: num_rota = "0"
     
-    # Descobre a sigla
     sigla = "XX"
     for bairro_chave, sigla_valor in SIGLAS_MAP.items():
         if bairro_chave in b_norm:
@@ -58,13 +56,11 @@ def gerar_numero_os(bairro_texto):
         
     prefixo = f"nmv{num_rota}{sigla}".lower()
     
-    # Conta quantos chamados já existem com esse exato prefixo no banco de dados
     contador = 0
     for os_item in st.session_state.ordens_servico:
         if os_item.get('os', '').lower().startswith(prefixo):
             contador += 1
             
-    # Retorna o prefixo + o número sequencial formatado com 3 dígitos (ex: nmv1ct001)
     return f"{prefixo}{(contador + 1):03d}"
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
@@ -121,7 +117,6 @@ if 'materiais_disponiveis' not in st.session_state: st.session_state.materiais_d
 if 'usuarios' not in st.session_state: st.session_state.usuarios = dados_iniciais["usuarios"]
 if 'form_key' not in st.session_state: st.session_state.form_key = 0
 
-# Garante que o material de ajuste/vistoria sempre exista nas opções para o técnico não travar
 if "Nenhum material (Apenas ajuste/vistoria)" not in st.session_state.materiais_disponiveis:
     st.session_state.materiais_disponiveis.insert(0, "Nenhum material (Apenas ajuste/vistoria)")
 
@@ -214,8 +209,6 @@ def render_cidadao():
 
         if len(campos_vazios) == 0:
             endereco_completo = f"{logradouro}, {numero} - {complemento} | Bairro: {bairro} | {cidade}"
-            
-            # Geração da Nova OS Padrão NEMA Vagalume
             nova_os = {
                 "os": gerar_numero_os(bairro),
                 "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -275,25 +268,24 @@ def render_gerencia():
                                         if df.shape[1] <= COL_DATA: continue
 
                                         df[COL_DATA] = pd.to_datetime(df[COL_DATA], errors='coerce')
-                                        # Filtra apenas pelo ano selecionado (Vai pegar tudo do ano)
                                         mask_ano = (df[COL_DATA].dt.year == ano_sel)
                                         linhas_do_ano = df[mask_ano]
                                         
                                         for _, row in linhas_do_ano.iterrows():
                                             status_excel = str(row[COL_STATUS]).strip().upper()
                                             
-                                            # Define o status interno e materiais
                                             status_interno = ""
                                             mats_iniciais = []
                                             
-                                            if status_excel in ['NÃO REALIZADO', 'NÃO EXECUTADO', 'NAO REALIZADO', 'NAO EXECUTADO']:
+                                            # ADICIONADO: 'FINALIZADO', 'FINALIZADA', 'ABERTO', 'PENDENTE'
+                                            if status_excel in ['NÃO REALIZADO', 'NÃO EXECUTADO', 'NAO REALIZADO', 'NAO EXECUTADO', 'ABERTO', 'PENDENTE']:
                                                 status_interno = "Aguardando Despacho"
-                                            elif status_excel in ['REALIZADO', 'EXECUTADO', 'CONCLUIDO', 'CONCLUÍDO', 'OK']:
+                                            elif status_excel in ['REALIZADO', 'EXECUTADO', 'CONCLUIDO', 'CONCLUÍDO', 'OK', 'FINALIZADO', 'FINALIZADA']:
                                                 status_interno = "Concluída"
                                                 mats_iniciais = ["Lançado via histórico da planilha"]
                                                 chamados_concluidos_importados += 1
                                             else:
-                                                continue # Se estiver em branco ou lixo, pula a linha
+                                                continue 
                                                 
                                             prob_val = str(row[COL_PROBLEMA]).title() if pd.notna(row[COL_PROBLEMA]) else "Manutenção Importada"
                                             

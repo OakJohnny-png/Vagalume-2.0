@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import uuid
 from datetime import datetime, date
 import requests
 import json
@@ -19,6 +18,16 @@ ROTAS_MAP = {
     "ROTA 6": ["BARRA DA ITOUPAVA", "NAVEGANTES", "SANTA RITA", "VALADA ITOUPAVA", "VALADA SAO PAULO", "RAINHA"]
 }
 
+# --- DICIONÁRIO DE SIGLAS DOS BAIRROS ---
+SIGLAS_MAP = {
+    "CENTRO": "CT", "JARDIM AMERICA": "JA", "ALBERTINA": "AB", "LARANJEIRAS": "LA",
+    "BOA VISTA": "BV", "EUGENIO SCHNEIDER": "ES", "FUNDO CANOAS": "FC", "CANOAS": "CN",
+    "PROGRESSO": "PR", "PAMPLONA": "PM", "CANTA GALO": "CG", "BARRA DO TROMBUDO": "BT",
+    "BARRAGEM": "BG", "BUDAG": "BD", "SUMARE": "SU", "SANTANA": "ST", "TABOAO": "TB",
+    "BREMER": "BR", "BELA ALIANCA": "BA", "BARRA DA ITOUPAVA": "BI", "NAVEGANTES": "NV",
+    "SANTA RITA": "SR", "VALADA ITOUPAVA": "VI", "VALADA SAO PAULO": "VS", "RAINHA": "RA"
+}
+
 # --- FUNÇÃO PARA DESCOBRIR A ROTA BASEADA NO BAIRRO ---
 def extrair_rota(bairro_texto):
     if not bairro_texto: return "OUTRAS ROTAS"
@@ -27,6 +36,36 @@ def extrair_rota(bairro_texto):
         if any(b in b_norm for b in bairros):
             return rota
     return "OUTRAS ROTAS"
+
+# --- FUNÇÃO PARA GERAR O NÚMERO DA OS PADRÃO NEMA VAGALUME ---
+def gerar_numero_os(bairro_texto):
+    if not bairro_texto: bairro_texto = "INDEFINIDO"
+    b_norm = ''.join(c for c in unicodedata.normalize('NFD', bairro_texto) if unicodedata.category(c) != 'Mn').upper().strip()
+    
+    # Descobre o número da rota
+    rota_extenso = extrair_rota(b_norm)
+    num_rota = "".join([s for s in rota_extenso if s.isdigit()])
+    if not num_rota: num_rota = "0" # Caso caia em "OUTRAS ROTAS"
+    
+    # Descobre a sigla
+    sigla = "XX"
+    for bairro_chave, sigla_valor in SIGLAS_MAP.items():
+        if bairro_chave in b_norm:
+            sigla = sigla_valor
+            break
+    if sigla == "XX" and len(b_norm) >= 2:
+        sigla = b_norm[:2].upper()
+        
+    prefixo = f"nmv{num_rota}{sigla}".lower()
+    
+    # Conta quantos chamados já existem com esse exato prefixo no banco de dados
+    contador = 0
+    for os_item in st.session_state.ordens_servico:
+        if os_item.get('os', '').lower().startswith(prefixo):
+            contador += 1
+            
+    # Retorna o prefixo + o número sequencial formatado com 3 dígitos (ex: nmv1ct001)
+    return f"{prefixo}{(contador + 1):03d}"
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
 def carregar_dados():
@@ -175,8 +214,10 @@ def render_cidadao():
 
         if len(campos_vazios) == 0:
             endereco_completo = f"{logradouro}, {numero} - {complemento} | Bairro: {bairro} | {cidade}"
+            
+            # Geração da Nova OS Padrão NEMA Vagalume
             nova_os = {
-                "os": str(uuid.uuid4())[:8].upper(),
+                "os": gerar_numero_os(bairro),
                 "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
                 "nome_solicitante": nome_cidadao,
                 "cpf_solicitante": cpf_cidadao,
@@ -209,12 +250,12 @@ def render_gerencia():
         
         with st.expander("📂 Importar Planilha (Por Abas)", expanded=False):
             st.write("Suba sua planilha onde cada ABA é um Bairro.")
-            ano_sel = st.number_input("Ano das Pendências:", value=datetime.now().year, step=1)
+            ano_sel = st.number_input("Ano das Pendências/Concluídas:", value=datetime.now().year, step=1)
             arquivo_excel = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
             
             if arquivo_excel is not None:
                 if st.button("🚀 Processar e Gerar Chamados", type="primary"):
-                    with st.spinner('Lendo abas e filtrando pendências...'):
+                    with st.spinner('Lendo abas e processando histórico (Pendentes e Concluídas)...'):
                         try:
                             COL_DATA = 7      # Coluna H
                             COL_PROBLEMA = 1  # Coluna B
@@ -223,7 +264,8 @@ def render_gerencia():
                             xls = pd.read_excel(arquivo_excel, sheet_name=None, header=None)
                             abas_disponiveis = {nome.strip().upper(): nome for nome in xls.keys()}
                             
-                            chamados_criados = 0
+                            chamados_importados = 0
+                            chamados_concluidos_importados = 0
 
                             for route, neighborhoods in ROTAS_MAP.items():
                                 for neighborhood in neighborhoods:
@@ -233,18 +275,30 @@ def render_gerencia():
                                         if df.shape[1] <= COL_DATA: continue
 
                                         df[COL_DATA] = pd.to_datetime(df[COL_DATA], errors='coerce')
-                                        mask = (
-                                            (df[COL_DATA].dt.year == ano_sel) & 
-                                            (df[COL_STATUS].astype(str).str.strip().str.upper().isin(['NÃO REALIZADO', 'NÃO EXECUTADO', 'NAO REALIZADO', 'NAO EXECUTADO']))
-                                        )
+                                        # Filtra apenas pelo ano selecionado (Vai pegar tudo do ano)
+                                        mask_ano = (df[COL_DATA].dt.year == ano_sel)
+                                        linhas_do_ano = df[mask_ano]
                                         
-                                        linhas_pendentes = df[mask]
-                                        
-                                        for _, row in linhas_pendentes.iterrows():
+                                        for _, row in linhas_do_ano.iterrows():
+                                            status_excel = str(row[COL_STATUS]).strip().upper()
+                                            
+                                            # Define o status interno e materiais
+                                            status_interno = ""
+                                            mats_iniciais = []
+                                            
+                                            if status_excel in ['NÃO REALIZADO', 'NÃO EXECUTADO', 'NAO REALIZADO', 'NAO EXECUTADO']:
+                                                status_interno = "Aguardando Despacho"
+                                            elif status_excel in ['REALIZADO', 'EXECUTADO', 'CONCLUIDO', 'CONCLUÍDO', 'OK']:
+                                                status_interno = "Concluída"
+                                                mats_iniciais = ["Lançado via histórico da planilha"]
+                                                chamados_concluidos_importados += 1
+                                            else:
+                                                continue # Se estiver em branco ou lixo, pula a linha
+                                                
                                             prob_val = str(row[COL_PROBLEMA]).title() if pd.notna(row[COL_PROBLEMA]) else "Manutenção Importada"
                                             
                                             nova_os = {
-                                                "os": str(uuid.uuid4())[:8].upper(),
+                                                "os": gerar_numero_os(neighborhood),
                                                 "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
                                                 "nome_solicitante": "SISTEMA",
                                                 "cpf_solicitante": "SISTEMA",
@@ -253,21 +307,21 @@ def render_gerencia():
                                                 "endereco": f"Endereço não detalhado na planilha | Bairro: {neighborhood}",
                                                 "bairro": neighborhood,
                                                 "problema": prob_val,
-                                                "descricao": f"Chamado importado automaticamente da planilha (Aba: {neighborhood}).",
-                                                "status": "Aguardando Despacho",
-                                                "materiais": [],
-                                                "obs_tecnico": "",
+                                                "descricao": f"Chamado importado automaticamente da planilha (Aba: {neighborhood}). Status na planilha: {status_excel}.",
+                                                "status": status_interno,
+                                                "materiais": mats_iniciais,
+                                                "obs_tecnico": "Importado do Excel.",
                                                 "prazo": "Não definido"
                                             }
                                             st.session_state.ordens_servico.append(nova_os)
-                                            chamados_criados += 1
+                                            chamados_importados += 1
                                             
-                            if chamados_criados > 0:
+                            if chamados_importados > 0:
                                 salvar_dados()
-                                st.success(f"✅ {chamados_criados} chamados importados com sucesso!")
+                                st.success(f"✅ {chamados_importados} chamados importados no total! ({chamados_concluidos_importados} já contabilizados na aba Prefeitura como concluídos).")
                                 st.rerun()
                             else:
-                                st.warning(f"Nenhuma pendência encontrada para o ano de {ano_sel} nas abas mapeadas.")
+                                st.warning(f"Nenhum dado válido encontrado para o ano de {ano_sel}.")
 
                         except Exception as e:
                             st.error(f"Erro ao ler a planilha: {e}")
@@ -358,14 +412,13 @@ def render_gerencia():
                 rotas_ordenadas.append("OUTRAS ROTAS")
 
             for rota in rotas_ordenadas:
-                # Cabeçalho da Rota com o Botão de Despachar a Rota Inteira
                 col_titulo, col_data_rota, col_btn_rota = st.columns([3, 2, 2])
                 with col_titulo:
                     st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 15px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
                 with col_data_rota:
                     prazo_rota = st.date_input("Prazo p/ Rota:", min_value=date.today(), key=f"prazo_rota_{rota}")
                 with col_btn_rota:
-                    st.write("") # Alinhamento
+                    st.write("") 
                     if st.button(f"🚀 Despachar {rota}", use_container_width=True, type="primary", key=f"despachar_todas_{rota}"):
                         for os_item in chamados_agrupados[rota]:
                             os_item['status'] = "Enviada ao Técnico"
@@ -373,7 +426,6 @@ def render_gerencia():
                         salvar_dados()
                         st.rerun()
                 
-                # Lista de chamados da Rota
                 for os_item in chamados_agrupados[rota]:
                     col_expander, col_botao = st.columns([3, 1])
                     
@@ -395,7 +447,6 @@ def render_gerencia():
                             os_item['prazo'] = st.session_state[f"prazo_{os_item['os']}"].strftime("%d/%m/%Y") if f"prazo_{os_item['os']}" in st.session_state else date.today().strftime("%d/%m/%Y")
                             salvar_dados()
                             st.rerun()
-                        # Botão de Excluir para a Gerência
                         if st.button("🗑️ Excluir", key=f"del_novo_{os_item['os']}", use_container_width=True):
                             st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
                             salvar_dados()
@@ -408,7 +459,6 @@ def render_tecnico():
     if not os_tecnico: 
         st.info("Nenhuma ordem de serviço pendente!")
     else:
-        # AGRUPAMENTO POR ROTAS NA ABA DO TÉCNICO
         chamados_agrupados_tec = {}
         for os_item in os_tecnico:
             bairro_os = os_item.get('bairro', '')
@@ -474,7 +524,6 @@ def render_tecnico():
                     
                     with col_salvar:
                         if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
-                            # TRAVA DE MATERIAIS OBRIGATÓRIOS
                             if novo_status == "Concluída" and not os_item.get('materiais'):
                                 st.error("⚠️ Para concluir a OS, é obrigatório registrar o material utilizado (ou selecionar 'Nenhum material' na lista)!")
                             else:
@@ -485,7 +534,6 @@ def render_tecnico():
                                 st.rerun()
                     
                     with col_excluir:
-                        # Botão de excluir APENAS visível para Gerência
                         if st.session_state.user_role == 'gerencia':
                             if st.button("🗑️ Excluir OS", key=f"del_tec_{os_item['os']}", type="secondary"):
                                 st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
@@ -511,7 +559,7 @@ def render_prefeitura():
         c4.metric("Serviços Concluídos", len(df_os[df_os['status'] == 'Concluída']))
         
         st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-top: 20px; margin-bottom: 10px; color: #444;">Histórico Completo</h3>""", unsafe_allow_html=True)
-        st.dataframe(df_os[['os', 'data', 'prazo', 'endereco', 'problema', 'status']], use_container_width=True)
+        st.dataframe(df_os[['os', 'data', 'bairro', 'prazo', 'endereco', 'problema', 'status']], use_container_width=True)
 
 # ==========================================
 # GESTOR DE TELAS (ROTEAMENTO)
@@ -532,7 +580,6 @@ if st.session_state.page == 'app':
             
     st.divider()
 
-    # --- NOVA LOGO SEGURA ---
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         if os.path.exists("logo.png"):
@@ -572,7 +619,6 @@ elif st.session_state.page == 'home':
             st.session_state.page = 'login'
             st.rerun()
             
-    # --- NOVA LOGO SEGURA DA HOME ---
     st.write("")
     st.write("")
     col_h1, col_h2, col_h3 = st.columns([1, 2, 1])

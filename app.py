@@ -386,4 +386,325 @@ def render_gerencia():
                     st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
                     st.caption(f"Prazo: {os_item.get('prazo', 'N/D')} | Status: {os_item['status']}")
                 with col2:
+                    if st.button("🗑️ Excluir", key=f"del_and_{os_item['os']}", use_container_width=True):
+                        st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                        salvar_dados()
+                        st.rerun()
+                st.write("---")
+
+        with st.expander("✅ Chamados Concluídos", expanded=False):
+            os_concluidas = [os for os in st.session_state.ordens_servico if os['status'] == "Concluída"]
+            if not os_concluidas:
+                st.write("Nenhum chamado concluído ainda.")
+            for os_item in os_concluidas:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**OS {os_item['os']}** - {os_item['problema']}")
+                    st.write(f"👤 **Solicitante:** {os_item.get('nome_solicitante', 'N/D')}")
+                    st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                    st.write(f"🛠 **Materiais Usados:** {', '.join(os_item.get('materiais', ['Nenhum']))}")
+                with col2:
+                    if st.button("🗑️ Excluir", key=f"del_concl_{os_item['os']}", use_container_width=True):
+                        st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                        salvar_dados()
+                        st.rerun()
+                st.write("---")
+
+    with col_chamados:
+        st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-bottom: 10px; color: #444;">🚨 Aguardando Despacho</h3>""", unsafe_allow_html=True)
+        chamados_novos = [os for os in st.session_state.ordens_servico if os['status'] == "Aguardando Despacho"]
+        
+        if not chamados_novos: 
+            st.info("Nenhum chamado novo.")
+        else:
+            chamados_agrupados = {}
+            for os_item in chamados_novos:
+                bairro_os = os_item.get('bairro', '')
+                if not bairro_os and '| Bairro: ' in os_item['endereco']: 
+                    bairro_os = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
+                
+                rota_os = extrair_rota(bairro_os)
+                if rota_os not in chamados_agrupados:
+                    chamados_agrupados[rota_os] = []
+                chamados_agrupados[rota_os].append(os_item)
+            
+            rotas_ordenadas = sorted(chamados_agrupados.keys())
+            if "OUTRAS ROTAS" in rotas_ordenadas:
+                rotas_ordenadas.remove("OUTRAS ROTAS")
+                rotas_ordenadas.append("OUTRAS ROTAS")
+
+            for rota in rotas_ordenadas:
+                col_titulo, col_data_rota, col_btn_rota = st.columns([3, 2, 2])
+                with col_titulo:
+                    st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 15px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+                with col_data_rota:
+                    prazo_rota = st.date_input("Prazo p/ Rota:", min_value=date.today(), key=f"prazo_rota_{rota}")
+                with col_btn_rota:
+                    st.write("") 
+                    
+                    # LINHA QUEBRADA PARA EVITAR ERRO DE CORTE
                     if st.button(
+                        label=f"🚀 Despachar {rota}", 
+                        use_container_width=True, 
+                        type="primary", 
+                        key=f"despachar_todas_{rota}"
+                    ):
+                        for os_item in chamados_agrupados[rota]:
+                            os_item['status'] = "Enviada ao Técnico"
+                            os_item['prazo'] = prazo_rota.strftime("%d/%m/%Y")
+                        salvar_dados()
+                        st.rerun()
+                
+                for os_item in chamados_agrupados[rota]:
+                    col_expander, col_botao = st.columns([3, 1])
+                    
+                    bairro_display = os_item.get('bairro', 'Bairro N/D')
+                    if not bairro_display and '| Bairro: ' in os_item['endereco']:
+                         bairro_display = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
+                         
+                    with col_expander:
+                        with st.expander(f"OS: {os_item['os']} - {bairro_display} ({os_item['problema']})"):
+                            st.write(f"📅 **Aberto em:** {os_item['data']}")
+                            st.write(f"👤 **Contato:** {os_item.get('whatsapp_solicitante', 'N/D')} ({os_item.get('nome_solicitante', 'N/D')})")
+                            st.write(f"📍 **Endereço:** {os_item['endereco']}")
+                            st.write(f"📝 **Descrição:** {os_item['descricao']}")
+                            prazo_selecionado = st.date_input("Definir Prazo Limite:", min_value=date.today(), key=f"prazo_{os_item['os']}")
+                    
+                    with col_botao:
+                        if st.button("Despachar", key=f"btn_{os_item['os']}", use_container_width=True):
+                            os_item['status'] = "Enviada ao Técnico"
+                            
+                            # LINHA QUEBRADA PARA EVITAR ERRO DE CORTE
+                            chave_prazo = f"prazo_{os_item['os']}"
+                            if chave_prazo in st.session_state:
+                                data_prazo = st.session_state[chave_prazo].strftime("%d/%m/%Y")
+                            else:
+                                data_prazo = date.today().strftime("%d/%m/%Y")
+                            os_item['prazo'] = data_prazo
+                            
+                            salvar_dados()
+                            st.rerun()
+                        if st.button("🗑️ Excluir", key=f"del_novo_{os_item['os']}", use_container_width=True):
+                            st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                            salvar_dados()
+                            st.rerun()
+
+def render_tecnico():
+    st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Ordens de Serviço do Técnico</h2>""", unsafe_allow_html=True)
+    os_tecnico = [os for os in st.session_state.ordens_servico if os['status'] in ["Enviada ao Técnico", "Em Andamento"]]
+    
+    if not os_tecnico: 
+        st.info("Nenhuma ordem de serviço pendente!")
+    else:
+        chamados_agrupados_tec = {}
+        for os_item in os_tecnico:
+            bairro_os = os_item.get('bairro', '')
+            if not bairro_os and '| Bairro: ' in os_item['endereco']: 
+                bairro_os = os_item['endereco'].split('| Bairro: ')[1].split(' |')[0]
+            
+            rota_os = extrair_rota(bairro_os)
+            if rota_os not in chamados_agrupados_tec:
+                chamados_agrupados_tec[rota_os] = []
+            chamados_agrupados_tec[rota_os].append(os_item)
+        
+        rotas_ordenadas_tec = sorted(chamados_agrupados_tec.keys())
+        if "OUTRAS ROTAS" in rotas_ordenadas_tec:
+            rotas_ordenadas_tec.remove("OUTRAS ROTAS")
+            rotas_ordenadas_tec.append("OUTRAS ROTAS")
+
+        for rota in rotas_ordenadas_tec:
+            st.markdown(f"<h4 style='color: #2e7bcf; margin-top: 20px; border-bottom: 2px solid #2e7bcf; padding-bottom: 5px;'>📍 {rota}</h4>", unsafe_allow_html=True)
+            
+            chamados_da_rota = sorted(chamados_agrupados_tec[rota], key=lambda x: datetime.strptime(x['data'], "%d/%m/%Y %H:%M"))
+            
+            for os_item in chamados_da_rota:
+                with st.expander(f"OS: {os_item['os']} ({os_item['status']}) - {os_item.get('bairro', 'Bairro N/D')} - {os_item['problema']}"):
+                    st.write(f"**Data:** {os_item['data']}")
+                    st.write(f"**Endereço:** {os_item['endereco']}")
+                    st.write(f"**Descrição:** {os_item['descricao']}")
+                    st.error(f"⚠️ **PRAZO:** {os_item.get('prazo', 'Não definido')}")
+                    
+                    st.write("---")
+                    st.markdown("#### 🛠️ Materiais Utilizados")
+                    
+                    if not os_item.get('materiais'):
+                        st.info("Nenhum material adicionado ainda.")
+                    else:
+                        for mat_usado in os_item['materiais']:
+                            st.write(f"- {mat_usado}")
+                        
+                        if st.button("🗑️ Limpar Lista de Materiais", key=f"limpar_{os_item['os']}"):
+                            os_item['materiais'] = []
+                            salvar_dados()
+                            st.rerun()
+                    
+                    st.write("")
+                    col_mat, col_qtd = st.columns([3, 1])
+                    with col_mat:
+                        mat_sel = st.selectbox("Selecione o Material:", st.session_state.materiais_disponiveis, key=f"sel_{os_item['os']}")
+                    with col_qtd:
+                        qtd_sel = st.number_input("Qtd:", min_value=1, value=1, step=1, key=f"q_{os_item['os']}")
+                    
+                    if st.button("➕ Adicionar Material", key=f"add_{os_item['os']}"):
+                        if 'materiais' not in os_item:
+                            os_item['materiais'] = []
+                        os_item['materiais'].append(f"{qtd_sel}x {mat_sel}")
+                        salvar_dados()
+                        st.rerun()
+
+                    st.write("---")
+                    st.markdown("#### 📝 Fechamento da OS")
+                    novo_status = st.selectbox("Status do Serviço:", ["Em Andamento", "Concluída"], index=0 if os_item['status']=="Enviada ao Técnico" else 1, key=f"status_{os_item['os']}")
+                    obs = st.text_area("Observações / Descrição da Atividade:", value=os_item.get('obs_tecnico', ''), key=f"obs_{os_item['os']}")
+                    
+                    col_salvar, col_excluir = st.columns([3, 1])
+                    
+                    with col_salvar:
+                        if st.button("Salvar Apontamento e Concluir", key=f"salvar_{os_item['os']}", type="primary"):
+                            if novo_status == "Concluída" and not os_item.get('materiais'):
+                                st.error("⚠️ Para concluir a OS, é obrigatório registrar o material utilizado (ou selecionar 'Nenhum material' na lista)!")
+                            else:
+                                os_item['status'] = novo_status
+                                os_item['obs_tecnico'] = obs
+                                salvar_dados()
+                                st.success("Chamado atualizado com sucesso!")
+                                st.rerun()
+                    
+                    with col_excluir:
+                        if st.session_state.user_role == 'gerencia':
+                            if st.button("🗑️ Excluir OS", key=f"del_tec_{os_item['os']}", type="secondary"):
+                                st.session_state.ordens_servico = [o for o in st.session_state.ordens_servico if o['os'] != os_item['os']]
+                                salvar_dados()
+                                st.rerun()
+
+def render_prefeitura():
+    st.markdown("""<h2 style="white-space: nowrap; font-size: clamp(18px, 3.5vw, 32px); margin-bottom: 20px;">Painel de Gestão e Monitoramento</h2>""", unsafe_allow_html=True)
+    hoje_dt = datetime.strptime(date.today().strftime("%d/%m/%Y"), "%d/%m/%Y")
+    
+    os_atrasadas = [os for os in st.session_state.ordens_servico if os['status'] not in ["Concluída", "Aguardando Despacho"] and os.get('prazo') and os.get('prazo') != "Não definido" and hoje_dt > datetime.strptime(os.get('prazo'), "%d/%m/%Y")]
+    
+    if os_atrasadas: st.error(f"⚠️ ATENÇÃO: {len(os_atrasadas)} OS com PRAZO VENCIDO!")
+    else: st.success("✅ Todos os chamados técnicos estão dentro do prazo.")
+    
+    st.write("---")
+    if st.session_state.ordens_servico:
+        df_os = pd.DataFrame(st.session_state.ordens_servico)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total de Chamados", len(df_os))
+        c2.metric("Aguardando Gerência", len(df_os[df_os['status'] == 'Aguardando Despacho']))
+        c3.metric("Com a Equipe", len(df_os[df_os['status'].isin(['Enviada ao Técnico', 'Em Andamento'])]))
+        c4.metric("Serviços Concluídos", len(df_os[df_os['status'] == 'Concluída']))
+        
+        st.markdown("""<h3 style="white-space: nowrap; font-size: clamp(16px, 2.5vw, 24px); margin-top: 20px; margin-bottom: 10px; color: #444;">Histórico Completo</h3>""", unsafe_allow_html=True)
+        st.dataframe(df_os[['os', 'data', 'bairro', 'prazo', 'endereco', 'problema', 'status']], use_container_width=True)
+
+# ==========================================
+# GESTOR DE TELAS (ROTEAMENTO)
+# ==========================================
+
+if st.session_state.page == 'app':
+    
+    col_nav_texto, col_nav_btn = st.columns([8, 2])
+    with col_nav_texto:
+        if st.session_state.user_role == 'cidadao':
+            st.markdown("<div style='padding-top: 10px; color: #666;'>👤 <b>Modo:</b> Atendimento ao Cidadão</div>", unsafe_allow_html=True)
+    with col_nav_btn:
+        if st.button("Sair / Voltar", type="secondary", use_container_width=True):
+            st.query_params.clear() 
+            st.session_state.page = 'home'
+            st.session_state.user_role = None
+            st.rerun()
+            
+    st.divider()
+
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", use_container_width=True)
+
+    st.markdown(
+        f"""
+        <div style="text-align: center; margin-bottom: 15px;">
+            <h1 style="white-space: nowrap; font-size: clamp(22px, 4vw, 50px); margin-bottom: 0px;">
+                💡 Sistema Vagalume
+            </h1>
+            <h4 style="white-space: nowrap; font-size: clamp(12px, 2vw, 20px); font-style: italic; font-weight: normal; margin-top: 0px; color: #555;">
+                Sistema de gestão de iluminação pública
+            </h4>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+    if st.session_state.user_role == 'gerencia':
+        aba_1, aba_2, aba_3, aba_4 = st.tabs(["📱 Cidadão", "🗂️ Gerência", "🛠️ Técnico", "📊 Prefeitura"])
+        with aba_1: render_cidadao()
+        with aba_2: render_gerencia()
+        with aba_3: render_tecnico()
+        with aba_4: render_prefeitura()
+    elif st.session_state.user_role == 'cidadao':
+        render_cidadao()
+    elif st.session_state.user_role == 'tecnico':
+        render_tecnico()
+    elif st.session_state.user_role == 'prefeitura':
+        render_prefeitura()
+
+elif st.session_state.page == 'home':
+    col_login, col_vazia = st.columns([1, 4])
+    with col_login:
+        if st.button("🔒 Acesso Restrito", use_container_width=True):
+            st.session_state.page = 'login'
+            st.rerun()
+            
+    st.write("")
+    st.write("")
+    col_h1, col_h2, col_h3 = st.columns([1, 2, 1])
+    with col_h2:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", use_container_width=True)
+        else:
+            st.markdown('<img src="https://cdn-icons-png.flaticon.com/512/427/427242.png" style="width: 100%; max-width: 120px; margin: 0 auto; display: block; margin-bottom: 20px;">', unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div style="text-align: center; padding-bottom: 5vh;">
+            <h1 style="font-size: clamp(28px, 5vw, 60px); margin: 0;">Sistema Vagalume</h1>
+            <p style="font-size: clamp(14px, 2vw, 22px); color: #666; font-style: italic; margin-top: 5px;">Sistema de gestão de iluminação pública</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚨 Cadastrar Problema (Cidadão)", type="primary", use_container_width=True):
+            st.session_state.page = 'app'
+            st.session_state.user_role = 'cidadao'
+            st.rerun()
+
+elif st.session_state.page == 'login':
+    st.markdown("""<div style="text-align: center; margin-bottom: 30px;"><h2 style="font-size: clamp(24px, 4vw, 40px);">Acesso Restrito</h2></div>""", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("form_login"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            btn_login = st.form_submit_button("Entrar", use_container_width=True)
+            
+            if btn_login:
+                usuario_valido = None
+                for u in st.session_state.usuarios:
+                    if u['username'] == usuario and u['password'] == senha:
+                        usuario_valido = u
+                        break
+                if usuario_valido:
+                    st.query_params['role'] = usuario_valido['role'] 
+                    st.session_state.page = 'app'
+                    st.session_state.user_role = usuario_valido['role']
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+                    
+        if st.button("Voltar ao Início", use_container_width=True):
+            st.session_state.page = 'home'
+            st.rerun()

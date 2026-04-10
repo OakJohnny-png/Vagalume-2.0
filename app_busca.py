@@ -160,8 +160,8 @@ def mostrar_login():
 
         /* Mensagem de erro */
         .login-erro {
-            color: #FEA700
-           #color: #fff;
+            color: #FEA700;
+          /* color: #fff;*/
             background-color: #FEA700
             border-radius: 8px;
             padding: 0.5rem 1rem;

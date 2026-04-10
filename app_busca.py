@@ -558,7 +558,7 @@ def extrair_dados_requisicao(pdf_bytes) -> dict:
     linhas = texto_completo.split("\n")
 
     for linha in linhas:
-        m = re.search(r'Orçamento[:\s]+(\d+)', linha)
+        m = re.search(r'Pedido[:\s]+(\d+)', linha)
         if m and 'orcamento_pdf' not in cabecalho:
             cabecalho['orcamento_pdf'] = m.group(1).strip()
 

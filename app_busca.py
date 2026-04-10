@@ -1,3 +1,6 @@
+
+Copiar
+
 # =============================================================================
 #  Lúmen Bot — NEMA
 #  A inteligência que acende a sua obra
@@ -6,32 +9,33 @@
 #  Setor de Obras e Instalações Elétricas — NEMA
 #  Desenvolvido com Python + Streamlit
 # =============================================================================
-
+ 
 import os
 import re
 import json
 import glob
 import io
-from datetime import datetime
-
+import uuid
+from datetime import datetime, timedelta
+ 
 import pandas as pd
 import streamlit as st
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
-
+ 
 try:
     import bcrypt
     BCRYPT_OK = True
 except ImportError:
     import hashlib
     BCRYPT_OK = False
-
+ 
 try:
     import pdfplumber
     PDF_DISPONIVEL = True
 except ImportError:
     PDF_DISPONIVEL = False
-
+ 
 # ---------------------------------------------------------------------------
 # Configuração global da página
 # ---------------------------------------------------------------------------
@@ -40,7 +44,7 @@ st.set_page_config(
     page_icon="💡",
     layout="wide",
 )
-
+ 
 # ---------------------------------------------------------------------------
 # Constantes e caminhos
 # ---------------------------------------------------------------------------
@@ -50,28 +54,29 @@ HISTORICO_DIR     = os.path.join(BASE_DIR, "historico_devolucoes")
 REQUISICOES_DIR   = os.path.join(BASE_DIR, "historico_requisicoes")
 RASCUNHO_PATH     = os.path.join(BASE_DIR, "rascunho_solicitacao.json")
 USUARIOS_PATH     = os.path.join(BASE_DIR, "usuarios.json")
-
+SESSIONS_PATH     = os.path.join(BASE_DIR, "sessions.json")
+ 
 REF_CLIENTES      = os.path.join(BASE_DIR, "clientes.xlsx")
 REF_VENDEDORES    = os.path.join(BASE_DIR, "vendedores.xlsx")
 REF_COMPRADORES   = os.path.join(BASE_DIR, "compradores.xlsx")
 REF_TIPOS_VENDA   = os.path.join(BASE_DIR, "tipos_venda.xlsx")
 REF_DEPARTAMENTOS = os.path.join(BASE_DIR, "departamentos.xlsx")
-
+ 
 os.makedirs(HISTORICO_DIR, exist_ok=True)
 os.makedirs(REQUISICOES_DIR, exist_ok=True)
-
-
+ 
+ 
 # ===========================================================================
 # FUNÇÕES DE AUTENTICAÇÃO
 # ===========================================================================
-
+ 
 def _hash_senha(senha: str) -> str:
     if BCRYPT_OK:
         return bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
     else:
         return hashlib.sha256(senha.encode()).hexdigest()
-
-
+ 
+ 
 def _verificar_senha(senha: str, hash_salvo: str) -> bool:
     if BCRYPT_OK:
         try:
@@ -80,8 +85,8 @@ def _verificar_senha(senha: str, hash_salvo: str) -> bool:
             return False
     else:
         return hashlib.sha256(senha.encode()).hexdigest() == hash_salvo
-
-
+ 
+ 
 def carregar_usuarios() -> dict:
     """Carrega o arquivo de usuários. Cria admin padrão se não existir."""
     if not os.path.exists(USUARIOS_PATH):
@@ -100,13 +105,13 @@ def carregar_usuarios() -> dict:
             return json.load(f)
     except Exception:
         return {}
-
-
+ 
+ 
 def salvar_usuarios(usuarios: dict):
     with open(USUARIOS_PATH, "w", encoding="utf-8") as f:
         json.dump(usuarios, f, ensure_ascii=False, indent=4)
-
-
+ 
+ 
 def autenticar(usuario: str, senha: str) -> bool:
     usuarios = carregar_usuarios()
     u = usuarios.get(usuario.strip().lower())
@@ -115,18 +120,76 @@ def autenticar(usuario: str, senha: str) -> bool:
     if not u.get("ativo", True):
         return False
     return _verificar_senha(senha, u["senha_hash"])
-
-
+ 
+ 
 def get_perfil(usuario: str) -> str:
     usuarios = carregar_usuarios()
     u = usuarios.get(usuario.strip().lower(), {})
     return u.get("perfil", "usuario")
-
-
+ 
+ 
+# ===========================================================================
+# SESSÕES PERSISTENTES (sobrevivem ao F5)
+# ===========================================================================
+ 
+def _carregar_sessions() -> dict:
+    if not os.path.exists(SESSIONS_PATH):
+        return {}
+    try:
+        with open(SESSIONS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+ 
+ 
+def _salvar_sessions(sessions: dict):
+    with open(SESSIONS_PATH, "w", encoding="utf-8") as f:
+        json.dump(sessions, f, ensure_ascii=False, indent=4)
+ 
+ 
+def criar_sessao(usuario: str) -> str:
+    """Cria token de sessão e persiste em arquivo. Retorna o token."""
+    token = str(uuid.uuid4())
+    sessions = _carregar_sessions()
+    # limpa sessões antigas (> 8 horas)
+    agora = datetime.now()
+    sessions = {
+        t: d for t, d in sessions.items()
+        if datetime.fromisoformat(d["criado_em"]) > agora - timedelta(hours=8)
+    }
+    sessions[token] = {
+        "usuario": usuario,
+        "perfil": get_perfil(usuario),
+        "criado_em": agora.isoformat(),
+    }
+    _salvar_sessions(sessions)
+    return token
+ 
+ 
+def validar_sessao(token: str) -> dict | None:
+    """Valida token e retorna dados da sessão ou None."""
+    if not token:
+        return None
+    sessions = _carregar_sessions()
+    dado = sessions.get(token)
+    if not dado:
+        return None
+    criado = datetime.fromisoformat(dado["criado_em"])
+    if datetime.now() - criado > timedelta(hours=8):
+        return None
+    return dado
+ 
+ 
+def encerrar_sessao(token: str):
+    sessions = _carregar_sessions()
+    sessions.pop(token, None)
+    _salvar_sessions(sessions)
+ 
+ 
 # ===========================================================================
 # TELA DE LOGIN
 # ===========================================================================
-
+ 
 def mostrar_login():
     # CSS da tela de login
     st.markdown("""
@@ -136,7 +199,7 @@ def mostrar_login():
         header { display: none !important; }
         #MainMenu { display: none !important; }
         footer { display: none !important; }
-
+ 
         /* Fundo vermelho full-screen */
         .stApp {
             background-color: #FF2800 !important;
@@ -145,10 +208,10 @@ def mostrar_login():
             padding: 0 !important;
             max-width: 100% !important;
         }
-
+ 
         /* Labels dos inputs em branco */
         label { color: white !important; font-size: 1rem !important; font-weight: 500 !important; }
-
+ 
         /* Inputs brancos com borda */
         input[type="text"], input[type="password"] {
             background-color: white !important;
@@ -157,12 +220,24 @@ def mostrar_login():
             font-size: 1rem !important;
             padding: 0.6rem 1rem !important;
         }
-
+ 
+        /* Botão de login amarelo */
+        div[data-testid="stForm"] button[kind="primaryFormSubmit"],
+        div[data-testid="stForm"] button {
+            background-color: #FEA700 !important;
+            color: #000 !important;
+            font-weight: 700 !important;
+            font-size: 1.1rem !important;
+            border-radius: 10px !important;
+            border: none !important;
+            width: 100% !important;
+            padding: 0.7rem !important;
+        }
+ 
         /* Mensagem de erro */
         .login-erro {
-            color: #FEA700;
-          /* color: #fff;*/
-            background-color: #FEA700
+            color: #fff;
+            background-color: rgba(0,0,0,0.25);
             border-radius: 8px;
             padding: 0.5rem 1rem;
             text-align: center;
@@ -171,7 +246,7 @@ def mostrar_login():
         }
     </style>
     """, unsafe_allow_html=True)
-
+ 
     # Header centralizado
     st.markdown(
         "<div style='text-align:center; padding: 2.5rem 1rem 1rem 1rem;'>"
@@ -186,44 +261,48 @@ def mostrar_login():
         " margin:1.5rem 0 0.4rem 0; letter-spacing:2px; font-family: Arial Black, sans-serif;'>LÚMEN BOT</h1>"
         "<p style='color:white; font-size:clamp(0.85rem,3vw,1rem); margin:0 0 1.5rem 0;"
         " font-style:italic; opacity:0.9;'>A inteligência que acende a sua obra.</p>"
-        #"<span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;"
-        #" padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>Login</span>"
+        "<span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;"
+        " padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>Login</span>"
         "</div>",
         unsafe_allow_html=True
     )
-
+ 
     # Área central do formulário
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-
+ 
     col_esq, col_form, col_dir = st.columns([1, 2, 1])
     with col_form:
         # Ícone do robô
         st.markdown("""
         <div style='text-align:center; font-size:4rem; margin-bottom:0.5rem;'>🤖</div>
         """, unsafe_allow_html=True)
-
+ 
         with st.form("form_login", clear_on_submit=False):
             usuario_input = st.text_input("Usuário", placeholder="", key="login_usuario")
             senha_input   = st.text_input("Senha", type="password", placeholder="", key="login_senha")
             st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
             entrar = st.form_submit_button("Entrar", use_container_width=True)
-
+ 
         if entrar:
             if autenticar(usuario_input, senha_input):
+                usuario = usuario_input.strip().lower()
+                token = criar_sessao(usuario)
                 st.session_state.logado = True
-                st.session_state.usuario_logado = usuario_input.strip().lower()
-                st.session_state.perfil_logado = get_perfil(usuario_input.strip().lower())
+                st.session_state.usuario_logado = usuario
+                st.session_state.perfil_logado = get_perfil(usuario)
+                st.session_state.session_token = token
                 st.session_state.pagina_atual = "🏠 Início"
+                st.query_params["token"] = token
                 st.rerun()
             else:
                 st.markdown(
                     "<div class='login-erro'>❌ Usuário ou senha incorretos.</div>",
                     unsafe_allow_html=True
                 )
-
+ 
     # Espaçador
     st.markdown("<div style='height: 4rem;'></div>", unsafe_allow_html=True)
-
+ 
     # Rodapé escuro
     st.markdown("""
     <div style='background-color:#8B0000; padding: 1.5rem 2rem; margin-top: 2rem;'>
@@ -238,12 +317,12 @@ def mostrar_login():
         </p>
     </div>
     """, unsafe_allow_html=True)
-
-
+ 
+ 
 # ===========================================================================
 # FUNÇÕES AUXILIARES — APP PRINCIPAL
 # ===========================================================================
-
+ 
 @st.cache_data
 def carregar_estoque() -> pd.DataFrame:
     df = pd.read_excel(EXCEL_PATH, dtype=str)
@@ -257,8 +336,8 @@ def carregar_estoque() -> pd.DataFrame:
     df.dropna(how="all", inplace=True)
     df.sort_values("Descrição", inplace=True, ignore_index=True)
     return df
-
-
+ 
+ 
 @st.cache_data
 def carregar_referencia(caminho: str, colunas: list) -> list:
     if not os.path.exists(caminho):
@@ -273,41 +352,41 @@ def carregar_referencia(caminho: str, colunas: list) -> list:
         return resultado
     except Exception:
         return []
-
-
+ 
+ 
 @st.cache_data
 def carregar_clientes() -> list:
     return carregar_referencia(REF_CLIENTES, ["Código", "Nome"])
-
-
+ 
+ 
 @st.cache_data
 def carregar_vendedores() -> list:
     return carregar_referencia(REF_VENDEDORES, ["Código", "Nome"])
-
-
+ 
+ 
 @st.cache_data
 def carregar_compradores() -> list:
     return carregar_referencia(REF_COMPRADORES, ["Nome"])
-
-
+ 
+ 
 @st.cache_data
 def carregar_tipos_venda() -> list:
     return carregar_referencia(REF_TIPOS_VENDA, ["Tipo"])
-
-
+ 
+ 
 @st.cache_data
 def carregar_departamentos() -> list:
     return carregar_referencia(REF_DEPARTAMENTOS, ["Código", "Nome"])
-
-
+ 
+ 
 def gerar_protocolo() -> str:
     hoje = datetime.now().strftime("%d%m%Y")
     padrao = os.path.join(HISTORICO_DIR, f"DEV_{hoje}*.json")
     arquivos_hoje = glob.glob(padrao)
     sequencial = len(arquivos_hoje) + 1
     return f"{hoje}.{sequencial:03d}"
-
-
+ 
+ 
 def gerar_numero_solicitacao(cliente_cod: str) -> str:
     hoje = datetime.now().strftime("%d%m%Y")
     cod = re.sub(r'\D', '', str(cliente_cod))
@@ -316,18 +395,18 @@ def gerar_numero_solicitacao(cliente_cod: str) -> str:
     existentes = glob.glob(padrao)
     sequencial = len(existentes) + 1
     return f"{prefixo}{sequencial:02d}"
-
-
+ 
+ 
 def df_lista_vazio() -> pd.DataFrame:
     return pd.DataFrame(columns=["Código", "Descrição", "Localização", "Quantidade"])
-
-
+ 
+ 
 def salvar_rascunho(cabecalho: dict, itens: list):
     dados = {"cabecalho": cabecalho, "itens": itens}
     with open(RASCUNHO_PATH, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
-
-
+ 
+ 
 def carregar_rascunho() -> dict:
     if os.path.exists(RASCUNHO_PATH):
         try:
@@ -336,20 +415,30 @@ def carregar_rascunho() -> dict:
         except Exception:
             return {}
     return {}
-
-
+ 
+ 
 def limpar_rascunho():
     if os.path.exists(RASCUNHO_PATH):
         os.remove(RASCUNHO_PATH)
-
-
+ 
+ 
 def inicializar_session_state():
+    # --- Restaura sessão pelo token na URL (persiste após F5) ---
     if "logado" not in st.session_state:
         st.session_state.logado = False
-    if "usuario_logado" not in st.session_state:
         st.session_state.usuario_logado = ""
-    if "perfil_logado" not in st.session_state:
         st.session_state.perfil_logado = "usuario"
+        st.session_state.session_token = ""
+ 
+        token = st.query_params.get("token", "")
+        if token:
+            dado = validar_sessao(token)
+            if dado:
+                st.session_state.logado = True
+                st.session_state.usuario_logado = dado["usuario"]
+                st.session_state.perfil_logado = dado["perfil"]
+                st.session_state.session_token = token
+ 
     if "lista_devolucao" not in st.session_state:
         st.session_state.lista_devolucao = df_lista_vazio()
     if "empresa" not in st.session_state:
@@ -368,12 +457,12 @@ def inicializar_session_state():
         st.session_state.req_manual_cab = rascunho.get("cabecalho", {})
     if "pagina_atual" not in st.session_state:
         st.session_state.pagina_atual = "🏠 Início"
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # Funções auxiliares — DEVOLUÇÃO
 # ---------------------------------------------------------------------------
-
+ 
 def salvar_devolucao():
     protocolo = st.session_state.protocolo
     dados = {
@@ -386,14 +475,14 @@ def salvar_devolucao():
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
     st.success(f"Devolução salva com sucesso! Protocolo: **{protocolo}**")
-
-
+ 
+ 
 def nova_devolucao():
     st.session_state.lista_devolucao = df_lista_vazio()
     st.session_state.empresa = ""
     st.session_state.protocolo = gerar_protocolo()
-
-
+ 
+ 
 def exportar_excel_devolucao() -> bytes:
     df_export = st.session_state.lista_devolucao.copy()
     df_export.insert(0, "Protocolo", st.session_state.protocolo)
@@ -403,8 +492,8 @@ def exportar_excel_devolucao() -> bytes:
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         df_export.to_excel(writer, index=False, sheet_name="Devolução")
     return buffer.getvalue()
-
-
+ 
+ 
 def listar_historico() -> list:
     arquivos = sorted(glob.glob(os.path.join(HISTORICO_DIR, "DEV_*.json")), reverse=True)
     registros = []
@@ -420,12 +509,12 @@ def listar_historico() -> list:
             "itens": dados.get("itens", []),
         })
     return registros
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # Funções auxiliares — PROCESSADOR DE CHAMADOS IP
 # ---------------------------------------------------------------------------
-
+ 
 ROUTES = {
     "ROTA 1": ["CENTRO", "JARDIM AMERICA"],
     "ROTA 2": ["ALBERTINA", "LARANJEIRAS", "BOA VISTA", "EUGENIO SCHNEIDER"],
@@ -433,8 +522,8 @@ ROUTES = {
     "ROTA 4": ["BELA VISTA", "VILA NOVA", "BAIRRO NOVO", "JARDIM ESPERANÇA"],
     "ROTA 5": ["INDUSTRIAL", "JARDIM INDUSTRIAL", "ZONA INDUSTRIAL"],
 }
-
-
+ 
+ 
 def processar_chamados(
     uploaded_file, fonte_escolhida,
     cor_fundo_rota, cor_fonte_rota, tamanho_rota,
@@ -444,7 +533,7 @@ def processar_chamados(
     xls = pd.read_excel(uploaded_file, sheet_name=None, header=None, dtype=str)
     abas_disponiveis = {nome.strip().upper(): nome for nome in xls.keys()}
     data_by_route = {r: {} for r in ROUTES}
-
+ 
     for route, neighborhoods in ROUTES.items():
         for neighborhood in neighborhoods:
             nome_aba_upper = neighborhood.upper()
@@ -459,19 +548,19 @@ def processar_chamados(
                     problems = df_filtered[1].tolist()
                     if problems:
                         data_by_route[route][neighborhood] = problems
-
+ 
     wb = Workbook()
     ws = wb.active
     ws.title = "Chamados Pendentes"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
-
+ 
     hex_bg_rota   = cor_fundo_rota.replace('#', '')
     hex_fg_rota   = cor_fonte_rota.replace('#', '')
     hex_bg_bairro = cor_fundo_bairro.replace('#', '')
     hex_fg_bairro = cor_fonte_bairro.replace('#', '')
     hex_bg_prob   = cor_fundo_prob.replace('#', '')
     hex_fg_prob   = cor_fonte_prob.replace('#', '')
-
+ 
     font_rota   = Font(name=fonte_escolhida, size=tamanho_rota,   color=hex_fg_rota,   bold=True)
     fill_rota   = PatternFill(start_color=hex_bg_rota,   end_color=hex_bg_rota,   fill_type="solid")
     font_bairro = Font(name=fonte_escolhida, size=tamanho_bairro, color=hex_fg_bairro, bold=True)
@@ -480,7 +569,7 @@ def processar_chamados(
     fill_prob   = PatternFill(start_color=hex_bg_prob,   end_color=hex_bg_prob,   fill_type="solid")
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'),
                          top=Side(style='thin'), bottom=Side(style='thin'))
-
+ 
     current_row = 1
     for route, neighborhoods in data_by_route.items():
         if not neighborhoods:
@@ -505,118 +594,163 @@ def processar_chamados(
                     cell.fill = fill_prob
                 cell.border = thin_border; cell.alignment = Alignment(wrap_text=True)
                 current_row += 1
-
+ 
     ws.column_dimensions['A'].width = 150
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     return output.getvalue()
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # Funções auxiliares — SOLICITAÇÃO DE MATERIAIS
 # ---------------------------------------------------------------------------
-
+ 
 def extrair_dados_requisicao(pdf_bytes) -> dict:
     cabecalho = {}
     itens = []
-
+ 
     with pdfplumber.open(pdf_bytes) as pdf:
         texto_completo = ""
         for page in pdf.pages:
             t = page.extract_text()
             if t:
                 texto_completo += t + "\n"
-
+ 
     linhas = texto_completo.split("\n")
-
+ 
+    # --- Extração do cabeçalho ---
     for linha in linhas:
-        m = re.search(r'Orçamento[:\s]+(\d+)', linha)
-        if m and 'orcamento_pdf' not in cabecalho:
-            cabecalho['orcamento_pdf'] = m.group(1).strip()
-
-        m = re.search(r'Cliente[:\s]+(\d+)\s+(.+?)(?=\s{2,}|Comprador|$)', linha)
-        if m and 'cliente_nome' not in cabecalho:
-            cabecalho['cliente_cod'] = m.group(1).strip()
-            cabecalho['cliente_nome'] = m.group(2).strip()
-
-        m = re.search(r'Vendedor[.\s:]+(.+?)(?=\s{2,}|Prazo|$)', linha)
-        if m and 'vendedor' not in cabecalho:
-            cabecalho['vendedor'] = m.group(1).strip()
-
-        m = re.search(r'Comprador[.\s:]+(.+?)(?=\s{2,}|Em\.\.|$)', linha)
-        if m and 'comprador' not in cabecalho:
-            val = re.sub(r'Em\.+:\s*\S+', '', m.group(1)).strip()
-            if val:
-                cabecalho['comprador'] = val
-
-        m = re.search(r'Tipo de Venda[.\s:]+(.+)', linha)
-        if m and 'tipo_venda' not in cabecalho:
-            cabecalho['tipo_venda'] = m.group(1).strip()
-
-        m = re.search(r'Departamento[.\s:]+(.+)', linha)
-        if m and 'departamento' not in cabecalho:
-            cabecalho['departamento'] = m.group(1).strip()
-
-        m = re.search(r'Marcações[.\s:]+(.+)', linha)
-        if m and 'marcacoes' not in cabecalho:
-            val = m.group(1).strip().lstrip(':').strip()
-            cabecalho['marcacoes'] = val if val else "—"
-
-        m = re.search(r'Observação\s*:\s*(.+)', linha)
-        if m and 'observacao' not in cabecalho:
-            cabecalho['observacao'] = m.group(1).strip()
-
-    _UN = r'PC|KG|MT|CX|PAR|VB|SC|BD|GL|TB|KIT|FD|CJ|JG|RL|LT|UN|M'
-
-    padrao_normal = re.compile(
-        r'^(\d{2})\s+(\d{4,6})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
+        if not cabecalho.get('orcamento_pdf'):
+            m = re.search(r'Or[çc]amento[:\s#Nº°.]*(\d+)', linha, re.IGNORECASE)
+            if m:
+                cabecalho['orcamento_pdf'] = m.group(1).strip()
+ 
+        if not cabecalho.get('cliente_nome'):
+            m = re.search(r'Cliente[:\s]+(\d+)\s+(.+?)(?=\s{2,}|Comprador|Vendedor|$)', linha, re.IGNORECASE)
+            if m:
+                cabecalho['cliente_cod'] = m.group(1).strip()
+                cabecalho['cliente_nome'] = m.group(2).strip()
+ 
+        if not cabecalho.get('vendedor'):
+            m = re.search(r'Vendedor[.:\s]+(.+?)(?=\s{2,}|Prazo|Comprador|$)', linha, re.IGNORECASE)
+            if m:
+                v = m.group(1).strip()
+                if v:
+                    cabecalho['vendedor'] = v
+ 
+        if not cabecalho.get('comprador'):
+            m = re.search(r'Comprador[.:\s]+(.+?)(?=\s{2,}|Em\.|$)', linha, re.IGNORECASE)
+            if m:
+                val = re.sub(r'Em\.+:\s*\S+', '', m.group(1)).strip()
+                if val:
+                    cabecalho['comprador'] = val
+ 
+        if not cabecalho.get('tipo_venda'):
+            m = re.search(r'Tipo\s+de\s+Venda[.:\s]+(.+)', linha, re.IGNORECASE)
+            if m:
+                cabecalho['tipo_venda'] = m.group(1).strip()
+ 
+        if not cabecalho.get('departamento'):
+            m = re.search(r'Departamento[.:\s]+(.+)', linha, re.IGNORECASE)
+            if m:
+                cabecalho['departamento'] = m.group(1).strip()
+ 
+        if not cabecalho.get('marcacoes'):
+            m = re.search(r'Marca[çc][oõ]es?[.:\s]+(.+)', linha, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip().lstrip(':').strip()
+                cabecalho['marcacoes'] = val if val else "—"
+ 
+        if not cabecalho.get('observacao'):
+            m = re.search(r'Observa[çc][aã]o\s*[:\s]+(.+)', linha, re.IGNORECASE)
+            if m:
+                cabecalho['observacao'] = m.group(1).strip()
+ 
+    # --- Extração de itens ---
+    # Unidades válidas
+    _UN = r'(?:PC|KG|MT|CX|PAR|VB|SC|BD|GL|TB|KIT|FD|CJ|JG|RL|LT|UN|M\b)'
+ 
+    # Padrão 1: SEQ  COD  DESCRICAO  UN  QTD  (com espaço antes da UN)
+    p1 = re.compile(
+        r'^(\d{1,3})\s+(\d{3,8})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
         re.IGNORECASE
     )
-    padrao_colado = re.compile(
-        r'^(\d{2})\s+(\d{4,6})\s+(.+?)(' + _UN + r')\s+([\d.,]+)$',
+    # Padrão 2: SEQ  COD  DESCRICAOUN  QTD  (UN colada na descrição)
+    p2 = re.compile(
+        r'^(\d{1,3})\s+(\d{3,8})\s+(.+?)(' + _UN + r')\s+([\d.,]+)\s*$',
         re.IGNORECASE
     )
-
+    # Padrão 3: só COD  DESCRICAO  UN  QTD (sem sequencial)
+    p3 = re.compile(
+        r'^(\d{3,8})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
+        re.IGNORECASE
+    )
+ 
+    seq_auto = 1
     for linha in linhas:
         linha_strip = linha.strip()
-        m = padrao_normal.match(linha_strip)
-        if m:
-            seq, codigo = m.group(1), m.group(2)
-            descricao = m.group(3).strip()
-            unidade = m.group(4).upper()
-            try:
-                quantidade = float(m.group(5).replace(',', '.'))
-            except ValueError:
-                quantidade = 0.0
-            itens.append({
-                "Seq": seq, "Localização": "", "Código": codigo,
-                "Descrição": descricao, "UN": unidade, "Quantidade": quantidade,
-            })
+        if not linha_strip:
             continue
-
-        m = padrao_colado.match(linha_strip)
+ 
+        m = p1.match(linha_strip)
         if m:
-            seq, codigo = m.group(1), m.group(2)
-            descricao = m.group(3).strip()
-            unidade = m.group(4).upper()
             try:
-                quantidade = float(m.group(5).replace(',', '.'))
+                qtd = float(m.group(5).replace(',', '.'))
             except ValueError:
-                quantidade = 0.0
+                qtd = 0.0
             itens.append({
-                "Seq": seq, "Localização": "", "Código": codigo,
-                "Descrição": descricao, "UN": unidade, "Quantidade": quantidade,
+                "Seq": f"{int(m.group(1)):02d}",
+                "Localização": "",
+                "Código": m.group(2),
+                "Descrição": m.group(3).strip(),
+                "UN": m.group(4).upper(),
+                "Quantidade": qtd,
             })
-
+            seq_auto = int(m.group(1)) + 1
+            continue
+ 
+        m = p2.match(linha_strip)
+        if m:
+            try:
+                qtd = float(m.group(5).replace(',', '.'))
+            except ValueError:
+                qtd = 0.0
+            itens.append({
+                "Seq": f"{int(m.group(1)):02d}",
+                "Localização": "",
+                "Código": m.group(2),
+                "Descrição": m.group(3).strip(),
+                "UN": m.group(4).upper(),
+                "Quantidade": qtd,
+            })
+            seq_auto = int(m.group(1)) + 1
+            continue
+ 
+        m = p3.match(linha_strip)
+        if m:
+            try:
+                qtd = float(m.group(4).replace(',', '.'))
+            except ValueError:
+                qtd = 0.0
+            itens.append({
+                "Seq": f"{seq_auto:02d}",
+                "Localização": "",
+                "Código": m.group(1),
+                "Descrição": m.group(2).strip(),
+                "UN": m.group(3).upper(),
+                "Quantidade": qtd,
+            })
+            seq_auto += 1
+ 
     return {"cabecalho": cabecalho, "itens": itens}
-
-
+ 
+ 
 def salvar_requisicao(cabecalho: dict, itens: list) -> str:
     cliente_cod = cabecalho.get('cliente_cod', '0')
     num_sol = gerar_numero_solicitacao(cliente_cod)
     cabecalho['num_solicitacao'] = num_sol
-
+ 
     nome_arquivo = f"SOL_{num_sol}.json"
     caminho = os.path.join(REQUISICOES_DIR, nome_arquivo)
     dados = {
@@ -627,8 +761,8 @@ def salvar_requisicao(cabecalho: dict, itens: list) -> str:
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
     return nome_arquivo
-
-
+ 
+ 
 def listar_requisicoes() -> list:
     arquivos = sorted(
         glob.glob(os.path.join(REQUISICOES_DIR, "SOL_*.json")),
@@ -654,13 +788,13 @@ def listar_requisicoes() -> list:
             "itens": dados.get("itens", []),
         })
     return registros
-
-
+ 
+ 
 def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Solicitação"
-
+ 
     fonte_titulo    = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
     fill_titulo     = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
     fonte_cab_label = Font(name="Calibri", size=10, bold=True)
@@ -676,16 +810,16 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     )
     alinhamento_centro = Alignment(horizontal="center", vertical="center")
     alinhamento_esq    = Alignment(horizontal="left", vertical="center", wrap_text=True)
-
+ 
     linha = 1
-
+ 
     ws.merge_cells(f"A{linha}:G{linha}")
     cell = ws.cell(row=linha, column=1, value="SOLICITAÇÃO DE MATERIAIS — LÚMEN BOT / NEMA")
     cell.font = fonte_titulo; cell.fill = fill_titulo
     cell.alignment = alinhamento_centro
     ws.row_dimensions[linha].height = 22
     linha += 1
-
+ 
     campos_cab = [
         ("Nº Solicitação", cabecalho.get("num_solicitacao", "—")),
         ("Nº Orçamento PDF", cabecalho.get("orcamento_pdf", "—")),
@@ -698,32 +832,32 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
         ("Marcações", cabecalho.get("marcacoes", "—")),
         ("Observação", cabecalho.get("observacao", "—")),
     ]
-
+ 
     for label, valor in campos_cab:
         ws.merge_cells(f"A{linha}:B{linha}")
         cell_label = ws.cell(row=linha, column=1, value=label)
         cell_label.font = fonte_cab_label; cell_label.fill = fill_cab
         cell_label.border = borda; cell_label.alignment = alinhamento_esq
-
+ 
         ws.merge_cells(f"C{linha}:G{linha}")
         cell_valor = ws.cell(row=linha, column=3, value=valor)
         cell_valor.font = fonte_cab_valor
         cell_valor.border = borda; cell_valor.alignment = alinhamento_esq
         linha += 1
-
+ 
     linha += 1
-
+ 
     headers     = ["Seq", "Local.", "Código", "Descrição", "UN", "Quantidade"]
     col_widths  = [6, 14, 12, 52, 8, 12]
     col_letters = ["A", "B", "C", "D", "E", "F"]
-
+ 
     for i, h in enumerate(headers):
         cell = ws.cell(row=linha, column=i + 1, value=h)
         cell.font = fonte_header; cell.fill = fill_header
         cell.border = borda; cell.alignment = alinhamento_centro
     ws.row_dimensions[linha].height = 18
     linha += 1
-
+ 
     for idx, item in enumerate(itens):
         fill_atual = fill_item_alt if idx % 2 == 0 else None
         valores = [
@@ -742,32 +876,32 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
                 cell.fill = fill_atual
         ws.row_dimensions[linha].height = 15
         linha += 1
-
+ 
     for col_letter, width in zip(col_letters, col_widths):
         ws.column_dimensions[col_letter].width = width
     ws.column_dimensions["G"].width = 5
-
+ 
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     return output.getvalue()
-
-
+ 
+ 
 # ===========================================================================
 # INICIALIZAÇÃO
 # ===========================================================================
 inicializar_session_state()
-
+ 
 # Garante que o arquivo de usuários existe
 carregar_usuarios()
-
+ 
 # ---------------------------------------------------------------------------
 # CONTROLE DE FLUXO: LOGIN ou APP
 # ---------------------------------------------------------------------------
 if not st.session_state.logado:
     mostrar_login()
     st.stop()
-
+ 
 # ---------------------------------------------------------------------------
 # CSS do app principal (só carrega após login)
 # ---------------------------------------------------------------------------
@@ -803,7 +937,7 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
+ 
 # ---------------------------------------------------------------------------
 # Carrega dados
 # ---------------------------------------------------------------------------
@@ -813,7 +947,7 @@ lista_vendedores    = carregar_vendedores()
 lista_compradores   = carregar_compradores()
 lista_tipos_venda   = carregar_tipos_venda()
 lista_departamentos = carregar_departamentos()
-
+ 
 # ---------------------------------------------------------------------------
 # SIDEBAR — Navegação principal
 # ---------------------------------------------------------------------------
@@ -829,16 +963,16 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
-
+ 
     # Monta lista de páginas conforme perfil
     paginas_disponiveis = ["🏠 Início", "🔍 Finder", "💡 Chamados IP", "📋 Solicitação de Materiais"]
     if st.session_state.perfil_logado == "admin":
         paginas_disponiveis.append("👤 Gestão de Usuários")
-
+ 
     # Garante que a página atual é válida
     if st.session_state.pagina_atual not in paginas_disponiveis:
         st.session_state.pagina_atual = "🏠 Início"
-
+ 
     pagina = st.radio(
         "Navegação",
         paginas_disponiveis,
@@ -846,19 +980,22 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.session_state.pagina_atual = pagina
-
+ 
     st.markdown("---")
     st.caption(f"👤 {st.session_state.usuario_logado}  |  {st.session_state.perfil_logado}")
     st.caption(f"Estoque: {len(df_estoque)} itens")
-
+ 
     if st.button("🚪 Sair", use_container_width=True):
+        encerrar_sessao(st.session_state.get("session_token", ""))
         st.session_state.logado = False
         st.session_state.usuario_logado = ""
         st.session_state.perfil_logado = "usuario"
+        st.session_state.session_token = ""
         st.session_state.pagina_atual = "🏠 Início"
+        st.query_params.clear()
         st.rerun()
-
-
+ 
+ 
 # ===========================================================================
 # PÁGINA: INÍCIO
 # ===========================================================================
@@ -874,7 +1011,7 @@ if pagina == "🏠 Início":
                   letter-spacing:3px; text-transform:uppercase; font-weight:600;'>NEMA</p>
     </div>
     """, unsafe_allow_html=True)
-
+ 
     st.markdown("---")
     st.info(
         "Use o menu lateral para navegar entre as funcionalidades do sistema.\n\n"
@@ -882,24 +1019,24 @@ if pagina == "🏠 Início":
         "- **Chamados IP**: processe planilhas de chamados de iluminação pública.\n"
         "- **Solicitação de Materiais**: crie, importe e gerencie solicitações de materiais."
     )
-
-
+ 
+ 
 # ===========================================================================
 # PÁGINA: FINDER
 # ===========================================================================
 elif pagina == "🔍 Finder":
     st.title("🔍 Finder — Busca de Materiais")
     st.markdown("Pesquise itens pelo **Código** ou pela **Descrição**.")
-
+ 
     termo = st.text_input("Digite o código ou a descrição do item:", placeholder="Ex: 1001 ou CABO")
-
+ 
     if termo.strip():
         mask = (
             df_estoque["Código"].str.contains(termo.strip(), case=False, na=False)
             | df_estoque["Descrição"].str.contains(termo.strip(), case=False, na=False)
         )
         resultado = df_estoque[mask].sort_values("Descrição").reset_index(drop=True)
-
+ 
         if resultado.empty:
             st.warning("Nenhum item encontrado para o termo pesquisado.")
         else:
@@ -907,24 +1044,24 @@ elif pagina == "🔍 Finder":
             st.dataframe(resultado, use_container_width=True, hide_index=True)
     else:
         st.dataframe(df_estoque, use_container_width=True, hide_index=True)
-
-
+ 
+ 
 # ===========================================================================
 # PÁGINA: CHAMADOS IP
 # ===========================================================================
 elif pagina == "💡 Chamados IP":
     st.title("💡 Processador de Chamados de Iluminação Pública")
     st.write("Faça o upload da planilha Excel contendo as abas dos bairros e personalize a formatação do arquivo final.")
-
+ 
     with st.expander("🎨 Personalização de Formatação", expanded=True):
         st.subheader("Configurações de Estilo")
-
+ 
         fonte_escolhida = st.selectbox(
             "Estilo da Fonte",
             ["Helvetica", "Arial", "Calibri", "Times New Roman", "Tahoma"],
             key="fonte_chamados"
         )
-
+ 
         st.subheader("1. Formatação das Rotas")
         col_rota1, col_rota2 = st.columns(2)
         with col_rota1:
@@ -932,7 +1069,7 @@ elif pagina == "💡 Chamados IP":
         with col_rota2:
             cor_fonte_rota = st.color_picker("Cor da Fonte (Rotas)", "#000000", key="fg_rota")
         tamanho_rota = st.number_input("Tamanho da Fonte (Rotas)", min_value=8, max_value=36, value=16, key="size_rota")
-
+ 
         st.subheader("2. Formatação dos Bairros")
         col_bairro1, col_bairro2 = st.columns(2)
         with col_bairro1:
@@ -940,7 +1077,7 @@ elif pagina == "💡 Chamados IP":
         with col_bairro2:
             cor_fonte_bairro = st.color_picker("Cor da Fonte (Bairros)", "#000000", key="fg_bairro")
         tamanho_bairro = st.number_input("Tamanho da Fonte (Bairros)", min_value=8, max_value=36, value=16, key="size_bairro")
-
+ 
         st.subheader("3. Formatação dos Problemas")
         col_prob1, col_prob2 = st.columns(2)
         with col_prob1:
@@ -948,10 +1085,10 @@ elif pagina == "💡 Chamados IP":
         with col_prob2:
             cor_fonte_prob = st.color_picker("Cor da Fonte (Problemas)", "#000000", key="fg_prob")
         tamanho_prob = st.number_input("Tamanho da Fonte (Problemas)", min_value=8, max_value=36, value=14, key="size_prob")
-
+ 
     st.markdown("---")
     uploaded_file = st.file_uploader("Arraste e solte sua planilha Excel (.xlsx) aqui", type=["xlsx"], key="upload_chamados")
-
+ 
     if uploaded_file is not None:
         if st.button("Processar Planilha", key="btn_processar"):
             with st.spinner('Lendo e processando os dados...'):
@@ -972,33 +1109,33 @@ elif pagina == "💡 Chamados IP":
                     )
                 except Exception as e:
                     st.error(f"❌ Ocorreu um erro ao processar o arquivo: {e}")
-
-
+ 
+ 
 # ===========================================================================
 # PÁGINA: SOLICITAÇÃO DE MATERIAIS
 # ===========================================================================
 elif pagina == "📋 Solicitação de Materiais":
     st.title("📋 Solicitação de Materiais")
-
+ 
     sub_manual, sub_pdf, sub_historico = st.tabs([
         "✏️ Criar Manualmente",
         "📄 Importar via PDF",
         "📂 Solicitações",
     ])
-
+ 
     # -------------------------------------------------------------------
     # SUB-ABA: CRIAR MANUALMENTE
     # -------------------------------------------------------------------
     with sub_manual:
         st.subheader("✏️ Nova Solicitação Manual")
-
+ 
         rascunho_existente = carregar_rascunho()
         if rascunho_existente and rascunho_existente.get("itens"):
             st.info(
                 f"💾 Há um rascunho salvo com **{len(rascunho_existente['itens'])}** item(ns). "
                 "Os dados foram restaurados automaticamente."
             )
-
+ 
         st.markdown("---")
         st.subheader("📌 Dados do Cabeçalho")
         col_m1, col_m2 = st.columns(2)
@@ -1008,7 +1145,7 @@ elif pagina == "📋 Solicitação de Materiais":
                 ["", "Orçamento", "Pedido", "Devolução"],
                 key="man_tipo_pedido"
             )
-
+ 
             opcoes_cliente = [""] + lista_clientes
             man_cliente_sel = st.selectbox("Cliente", opcoes_cliente, key="man_cliente_sel")
             if man_cliente_sel and " — " in man_cliente_sel:
@@ -1017,34 +1154,34 @@ elif pagina == "📋 Solicitação de Materiais":
             else:
                 man_cliente_cod = ""
                 man_cliente_nome = man_cliente_sel
-
+ 
             opcoes_comprador = [""] + lista_compradores
             man_comprador = st.selectbox("Comprador", opcoes_comprador, key="man_comprador")
-
+ 
         with col_m2:
             opcoes_vendedor = [""] + lista_vendedores
             man_vendedor_sel = st.selectbox("Vendedor", opcoes_vendedor, key="man_vendedor_sel")
-
+ 
             opcoes_tipo_venda = [""] + lista_tipos_venda
             man_tipo_venda = st.selectbox("Tipo de Venda", opcoes_tipo_venda, key="man_tipo_venda")
-
+ 
             opcoes_depto = [""] + lista_departamentos
             man_departamento = st.selectbox("Departamento", opcoes_depto, key="man_departamento")
-
+ 
             man_marcacoes = st.text_input("Marcações", key="man_marcacoes")
             man_observacao = st.text_input("Observação", key="man_observacao")
-
+ 
         st.markdown("---")
         st.subheader("📦 Adicionar Itens")
         col_busca, col_qtd, col_un = st.columns([3, 1, 1])
-
+ 
         with col_busca:
             man_busca = st.text_input(
                 "Buscar item no estoque (código ou descrição):",
                 key="man_busca_item",
                 placeholder="Ex: CABO ou 160001"
             )
-
+ 
         man_item_sel = None
         if man_busca.strip():
             mask_man = (
@@ -1052,7 +1189,7 @@ elif pagina == "📋 Solicitação de Materiais":
                 | df_estoque["Descrição"].str.contains(man_busca.strip(), case=False, na=False)
             )
             man_opcoes = df_estoque[mask_man].sort_values("Descrição").reset_index(drop=True)
-
+ 
             if not man_opcoes.empty:
                 rotulos_man = [
                     f"{row['Código']} — {row['Descrição']} [{row['Localização']}]"
@@ -1063,17 +1200,17 @@ elif pagina == "📋 Solicitação de Materiais":
                 man_item_sel = man_opcoes.iloc[idx_man]
             else:
                 st.warning("Nenhum item encontrado no estoque.")
-
+ 
         with col_qtd:
             man_quantidade = st.number_input("Quantidade", min_value=1, value=1, step=1, key="man_qtd")
-
+ 
         with col_un:
             man_un = st.selectbox(
                 "UN",
                 ["PC", "M", "KG", "UN", "CJ", "JG", "RL", "MT", "LT", "CX", "PAR", "KIT"],
                 key="man_un"
             )
-
+ 
         if st.button("➕ Adicionar Item à Solicitação", use_container_width=True, key="btn_add_man"):
             if man_item_sel is None:
                 st.error("Selecione um item do estoque antes de adicionar.")
@@ -1094,14 +1231,14 @@ elif pagina == "📋 Solicitação de Materiais":
                     st.session_state.req_manual_itens
                 )
                 st.success(f"✅ Item **{man_item_sel['Descrição']}** adicionado.")
-
+ 
         st.markdown("---")
         st.subheader(f"📝 Lista de Itens ({len(st.session_state.req_manual_itens)} item(ns))")
-
+ 
         if st.session_state.req_manual_itens:
             df_man = pd.DataFrame(st.session_state.req_manual_itens)
             st.dataframe(df_man, use_container_width=True, hide_index=True)
-
+ 
             col_rem, col_limpar = st.columns(2)
             with col_rem:
                 idx_remover = st.number_input(
@@ -1118,7 +1255,7 @@ elif pagina == "📋 Solicitação de Materiais":
                         it["Seq"] = f"{i+1:02d}"
                     salvar_rascunho({}, st.session_state.req_manual_itens)
                     st.rerun()
-
+ 
             with col_limpar:
                 if st.button("🗑️ Limpar toda a lista", key="btn_limpar_man"):
                     st.session_state.req_manual_itens = []
@@ -1126,7 +1263,7 @@ elif pagina == "📋 Solicitação de Materiais":
                     st.rerun()
         else:
             st.info("Nenhum item adicionado ainda.")
-
+ 
         st.markdown("---")
         st.subheader("💾 Salvar / Exportar")
         st.info(
@@ -1134,7 +1271,7 @@ elif pagina == "📋 Solicitação de Materiais":
             "no formato: CódigoCliente + Data + Sequencial (ex: 10900904202601)."
         )
         col_sv1, col_sv2 = st.columns(2)
-
+ 
         def _montar_cabecalho_manual():
             return {
                 "tipo_pedido": man_tipo_pedido,
@@ -1148,7 +1285,7 @@ elif pagina == "📋 Solicitação de Materiais":
                 "observacao": man_observacao,
                 "orcamento_pdf": "",
             }
-
+ 
         with col_sv1:
             if st.button("💾 Salvar Solicitação", use_container_width=True, key="btn_salvar_man"):
                 if not st.session_state.req_manual_itens:
@@ -1162,7 +1299,7 @@ elif pagina == "📋 Solicitação de Materiais":
                     limpar_rascunho()
                     st.session_state.req_manual_itens = []
                     st.success(f"✅ Solicitação salva! Nº: **{num_gerado}** | Arquivo: **{nome_salvo}**")
-
+ 
         with col_sv2:
             if st.session_state.req_manual_itens:
                 cab_man_exp = _montar_cabecalho_manual()
@@ -1175,7 +1312,7 @@ elif pagina == "📋 Solicitação de Materiais":
                     use_container_width=True,
                     key="btn_dl_man"
                 )
-
+ 
     # -------------------------------------------------------------------
     # SUB-ABA: IMPORTAR VIA PDF
     # -------------------------------------------------------------------
@@ -1185,7 +1322,7 @@ elif pagina == "📋 Solicitação de Materiais":
             "Faça o upload de um arquivo PDF de requisição de materiais. "
             "O sistema irá **ler, interpretar e extrair** automaticamente os dados."
         )
-
+ 
         if not PDF_DISPONIVEL:
             st.error("❌ A biblioteca **pdfplumber** não está instalada. Execute `pip install pdfplumber`.")
         else:
@@ -1195,7 +1332,7 @@ elif pagina == "📋 Solicitação de Materiais":
                 type=["pdf"],
                 key="upload_req_pdf"
             )
-
+ 
             if pdf_upload is not None:
                 with st.spinner("🔍 Lendo e interpretando o PDF..."):
                     try:
@@ -1209,7 +1346,17 @@ elif pagina == "📋 Solicitação de Materiais":
                         st.error(f"❌ Erro ao processar o PDF: {e}")
                         cabecalho = {}
                         itens = []
-
+ 
+                # Debug: mostra texto bruto do PDF
+                with st.expander("🔎 Ver texto bruto extraído do PDF (para diagnóstico)"):
+                    try:
+                        pdf_upload.seek(0)
+                        with pdfplumber.open(pdf_upload) as pdf_dbg:
+                            txt = "\n".join(p.extract_text() or "" for p in pdf_dbg.pages)
+                        st.text_area("Texto extraído:", txt, height=300)
+                    except Exception as e:
+                        st.warning(f"Não foi possível exibir texto bruto: {e}")
+ 
                 if cabecalho or itens:
                     st.markdown("---")
                     st.subheader("📌 Dados do Cabeçalho")
@@ -1224,7 +1371,7 @@ elif pagina == "📋 Solicitação de Materiais":
                         st.markdown(f"**Departamento:** {cabecalho.get('departamento', '—')}")
                         st.markdown(f"**Marcações:** {cabecalho.get('marcacoes', '—')}")
                         st.markdown(f"**Observação:** {cabecalho.get('observacao', '—')}")
-
+ 
                     st.markdown("---")
                     st.subheader(f"📦 Itens Extraídos ({len(itens)} itens)")
                     if itens:
@@ -1232,7 +1379,7 @@ elif pagina == "📋 Solicitação de Materiais":
                         st.dataframe(df_itens, use_container_width=True, hide_index=True)
                     else:
                         st.warning("Nenhum item foi extraído do PDF.")
-
+ 
                     st.markdown("---")
                     st.subheader("💾 Ações")
                     col_a1, col_a2 = st.columns(2)
@@ -1255,28 +1402,28 @@ elif pagina == "📋 Solicitação de Materiais":
                                 use_container_width=True,
                                 key="btn_download_req"
                             )
-
+ 
     # -------------------------------------------------------------------
     # SUB-ABA: SOLICITAÇÕES (HISTÓRICO)
     # -------------------------------------------------------------------
     with sub_historico:
         st.subheader("📂 Solicitações")
-
+ 
         requisicoes_salvas = listar_requisicoes()
-
+ 
         if not requisicoes_salvas:
             st.info("Nenhuma solicitação salva ainda.")
         else:
             st.markdown(f"**{len(requisicoes_salvas)}** solicitação(ões) registrada(s).")
             st.markdown("---")
-
+ 
             clientes_dict: dict = {}
             for req in requisicoes_salvas:
                 chave = f"{req['cliente_cod']} — {req['cliente_nome']}"
                 if chave not in clientes_dict:
                     clientes_dict[chave] = []
                 clientes_dict[chave].append(req)
-
+ 
             for cliente_label, reqs in sorted(clientes_dict.items()):
                 st.markdown(f"### 👤 {cliente_label}  ·  {len(reqs)} solicitação(ões)")
                 for req in reqs:
@@ -1298,11 +1445,11 @@ elif pagina == "📋 Solicitação de Materiais":
                             st.markdown(f"**Tipo de Venda:** {cab.get('tipo_venda', '—')}")
                             st.markdown(f"**Marcações:** {cab.get('marcacoes', '—')}")
                             st.markdown(f"**Observação:** {cab.get('observacao', '—')}")
-
+ 
                         if req["itens"]:
                             df_req_hist = pd.DataFrame(req["itens"])
                             st.dataframe(df_req_hist, use_container_width=True, hide_index=True)
-
+ 
                         dados_re_export = exportar_requisicao_excel(cab, req["itens"])
                         st.download_button(
                             label="📥 Exportar Excel",
@@ -1312,8 +1459,8 @@ elif pagina == "📋 Solicitação de Materiais":
                             key=f"re_export_{req['num_solicitacao']}"
                         )
                 st.markdown("---")
-
-
+ 
+ 
 # ===========================================================================
 # PÁGINA: GESTÃO DE USUÁRIOS (somente admin)
 # ===========================================================================
@@ -1321,12 +1468,12 @@ elif pagina == "👤 Gestão de Usuários":
     if st.session_state.perfil_logado != "admin":
         st.error("❌ Acesso negado. Esta página é exclusiva para administradores.")
         st.stop()
-
+ 
     st.title("👤 Gestão de Usuários")
     st.markdown("Gerencie os usuários do sistema. Apenas o **administrador** tem acesso a esta página.")
-
+ 
     usuarios_atuais = carregar_usuarios()
-
+ 
     # --- Lista de usuários ---
     st.subheader("📋 Usuários Cadastrados")
     dados_tabela = []
@@ -1339,9 +1486,9 @@ elif pagina == "👤 Gestão de Usuários":
         })
     if dados_tabela:
         st.dataframe(pd.DataFrame(dados_tabela), use_container_width=True, hide_index=True)
-
+ 
     st.markdown("---")
-
+ 
     # --- Cadastrar novo usuário ---
     st.subheader("➕ Cadastrar Novo Usuário")
     with st.form("form_novo_usuario", clear_on_submit=True):
@@ -1353,9 +1500,9 @@ elif pagina == "👤 Gestão de Usuários":
             novo_perfil = st.selectbox("Perfil", ["usuario", "admin"])
             nova_senha  = st.text_input("Senha", type="password")
             conf_senha  = st.text_input("Confirmar Senha", type="password")
-
+ 
         salvar_novo = st.form_submit_button("✅ Cadastrar Usuário", use_container_width=True)
-
+ 
     if salvar_novo:
         novo_login = novo_login.strip().lower()
         if not novo_login or not nova_senha or not novo_nome:
@@ -1376,9 +1523,9 @@ elif pagina == "👤 Gestão de Usuários":
             salvar_usuarios(usuarios_atuais)
             st.success(f"✅ Usuário **{novo_login}** cadastrado com sucesso!")
             st.rerun()
-
+ 
     st.markdown("---")
-
+ 
     # --- Alterar senha ---
     st.subheader("🔑 Alterar Senha de Usuário")
     with st.form("form_alterar_senha", clear_on_submit=True):
@@ -1390,7 +1537,7 @@ elif pagina == "👤 Gestão de Usuários":
         with col_s2:
             conf_senha_alt = st.text_input("Confirmar Nova Senha", type="password", key="conf_senha_alt")
         alterar_btn = st.form_submit_button("🔑 Alterar Senha", use_container_width=True)
-
+ 
     if alterar_btn:
         if not nova_senha_alt:
             st.error("Digite a nova senha.")
@@ -1402,9 +1549,9 @@ elif pagina == "👤 Gestão de Usuários":
             usuarios_atuais[login_alterar]["senha_hash"] = _hash_senha(nova_senha_alt)
             salvar_usuarios(usuarios_atuais)
             st.success(f"✅ Senha do usuário **{login_alterar}** alterada com sucesso!")
-
+ 
     st.markdown("---")
-
+ 
     # --- Ativar / Desativar usuário ---
     st.subheader("🔒 Ativar / Desativar Usuário")
     logins_nao_admin = [l for l in usuarios_atuais.keys() if l != "admin"]
@@ -1414,7 +1561,7 @@ elif pagina == "👤 Gestão de Usuários":
             status_atual = usuarios_atuais[login_toggle].get("ativo", True)
             acao_label = "🔒 Desativar" if status_atual else "🔓 Ativar"
             toggle_btn = st.form_submit_button(acao_label, use_container_width=True)
-
+ 
         if toggle_btn:
             usuarios_atuais[login_toggle]["ativo"] = not status_atual
             salvar_usuarios(usuarios_atuais)
@@ -1423,9 +1570,9 @@ elif pagina == "👤 Gestão de Usuários":
             st.rerun()
     else:
         st.info("Nenhum outro usuário cadastrado além do admin.")
-
+ 
     st.markdown("---")
-
+ 
     # --- Excluir usuário ---
     st.subheader("🗑️ Excluir Usuário")
     logins_excluiveis = [l for l in usuarios_atuais.keys() if l != "admin"]
@@ -1433,7 +1580,7 @@ elif pagina == "👤 Gestão de Usuários":
         with st.form("form_excluir", clear_on_submit=False):
             login_excluir = st.selectbox("Selecione o usuário para excluir", logins_excluiveis, key="sel_excluir")
             excluir_btn = st.form_submit_button("🗑️ Excluir Usuário", use_container_width=True)
-
+ 
         if excluir_btn:
             del usuarios_atuais[login_excluir]
             salvar_usuarios(usuarios_atuais)

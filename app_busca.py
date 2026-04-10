@@ -611,13 +611,15 @@ def extrair_dados_requisicao(pdf_bytes) -> dict:
     _UN = r'PC|KG|MT|CX|PAR|VB|SC|BD|GL|TB|KIT|FD|CJ|JG|RL|LT|UN|M'
 
     # Padrão 1: Seq + Localização + Código + Descrição + UN + Qtd (PDFs com Loc.Física)
+    # Localização aceita: 29.A3, 93.D4, 51G.B2, 68, 69 A2, etc.
+    _LOC = r'\d{1,3}(?:[A-Z./]\S*)?(?:\s+[A-Z]\w*)?'
     padrao_com_loc = re.compile(
-        r'^(\d{2})\s+(\d{1,3}\.\w+)\s+(\d{3,6})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
+        r'^(\d{2})\s+(' + _LOC + r')\s+(\d{3,6})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
         re.IGNORECASE
     )
     # Padrão 1b: Seq + Localização + Código + Descrição colada com UN + Qtd
     padrao_com_loc_colado = re.compile(
-        r'^(\d{2})\s+(\d{1,3}\.\w+)\s+(\d{3,6})\s+(.+?)(' + _UN + r')\s+([\d.,]+)$',
+        r'^(\d{2})\s+(' + _LOC + r')\s+(\d{3,6})\s+(.+?)(' + _UN + r')\s+([\d.,]+)$',
         re.IGNORECASE
     )
     # Padrão 2: Seq + Código + Descrição + UN + Qtd (PDFs sem Loc.Física)
@@ -1418,6 +1420,7 @@ elif pagina == "👤 Gestão de Usuários":
         with col_u2:
             novo_perfil = st.selectbox("Perfil", ["usuario", "admin"])
             nova_senha  = st.text_input("Senha", type="password")
+            st.success(f"✅ Usuário **{login_excluir}** excluído com sucesso!")
             conf_senha  = st.text_input("Confirmar Senha", type="password")
 
         salvar_novo = st.form_submit_button("✅ Cadastrar Usuário", use_container_width=True)
@@ -1503,8 +1506,6 @@ elif pagina == "👤 Gestão de Usuários":
         if excluir_btn:
             del usuarios_atuais[login_excluir]
             salvar_usuarios(usuarios_atuais)
-            st.success(f"✅ Usuário **{login_excluir}** excluído com sucesso!")
             st.rerun()
     else:
         st.info("Nenhum outro usuário para excluir além do admin.")
-

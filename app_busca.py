@@ -184,40 +184,39 @@ def mostrar_login():
     </style>
     """, unsafe_allow_html=True)
 
-    # Header: NEMA logo + título + botão login (decorativo)
-    col_logo, col_titulo, col_btn = st.columns([2, 5, 2])
-    with col_logo:
-        st.markdown("""
-        <div style='padding: 1.5rem 1rem 1rem 2rem;'>
-            <div style='border: 3px solid white; display:inline-block; padding: 4px 10px;'>
-                <span style='color:white; font-size:2rem; font-weight:900; letter-spacing:2px;
-                             font-family: Arial Black, sans-serif;'>N<span style='font-size:1.4rem;'>E</span>M<span style='font-size:1.4rem;'>A</span></span>
-            </div>
-            <div style='border-top: 3px solid white; margin-top:4px; width:90%;'></div>
+    # Header centralizado
+    st.markdown("""
+    <div style='text-align:center; padding: 2.5rem 1rem 1rem 1rem;'>
+
+        <!-- Logo NEMA -->
+        <div style='display:inline-block; border: 3px solid white;
+                    padding: 10px 20px 10px 20px; position:relative;'>
+            <div style='height:3px; background:white; margin-bottom:5px; border-radius:1px;'></div>
+            <div style='height:3px; background:white; margin-bottom:8px; border-radius:1px;'></div>
+            <span style='color:white; font-size:2.4rem; font-weight:900; letter-spacing:5px;
+                         font-family: Arial Black, Impact, sans-serif; display:block;
+                         line-height:1; text-transform:uppercase;'>Nema</span>
+            <div style='height:3px; background:white; margin-top:8px; border-radius:1px;'></div>
         </div>
-        """, unsafe_allow_html=True)
-    with col_titulo:
-        st.markdown("""
-        <div style='padding: 1.5rem 0 0 0;'>
-            <h1 style='color:white; font-size:clamp(1.8rem,5vw,3rem); font-weight:900;
-                       margin:0; letter-spacing:1px; font-family: Arial Black, sans-serif;'>
-                LÚMEN BOT
-            </h1>
-            <p style='color:white; font-size:clamp(0.8rem,2vw,1rem); margin:0.2rem 0 0 0;
-                      font-style:italic; opacity:0.9;'>
-                A inteligência que acende a sua obra.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_btn:
-        st.markdown("""
-        <div style='padding: 1.8rem 2rem 0 0; text-align:right;'>
-            <span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;
-                         padding: 0.6rem 2rem; border-radius:10px; display:inline-block;'>
-                Login
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+
+        <!-- Título -->
+        <h1 style='color:white; font-size:clamp(2rem,8vw,3.2rem); font-weight:900;
+                   margin:1.5rem 0 0.4rem 0; letter-spacing:2px;
+                   font-family: Arial Black, sans-serif;'>
+            LÚMEN BOT
+        </h1>
+        <p style='color:white; font-size:clamp(0.85rem,3vw,1rem); margin:0 0 1.5rem 0;
+                  font-style:italic; opacity:0.9;'>
+            A inteligência que acende a sua obra.
+        </p>
+
+        <!-- Botão Login decorativo -->
+        <span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;
+                     padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>
+            Login
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Área central do formulário
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)

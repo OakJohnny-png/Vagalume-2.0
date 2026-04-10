@@ -205,7 +205,7 @@ def mostrar_login():
         <div style='padding: 1.5rem 1rem 1rem 2rem;'>
             <div style='border: 3px solid white; display:inline-block; padding: 4px 10px;'>
                 <span style='color:white; font-size:2rem; font-weight:900; letter-spacing:2px;
-                             font-family: Arial Black, sans-serif;'>N<span style='font-size:1.4rem;'>E</span>M<span style='font-size:1.4rem;'>A</span></span>
+                             font-family: Arial Black, sans-serif;'>NEMA<span style='font-size:1.4rem;'</span></span>
             </div>
             <div style='border-top: 3px solid white; margin-top:4px; width:90%;'></div>
         </div>
@@ -217,7 +217,7 @@ def mostrar_login():
                        margin:0; letter-spacing:1px; font-family: Arial Black, sans-serif;'>
                 LÚMEN BOT
             </h1>
-            <p style='color:white; font-size:clamp(0.8rem,2vw,1rem); margin:0.2rem 0 0 0;
+            <p style='color:white; text-align: center; font-size:clamp(0.8rem,2vw,1rem); margin:0.2rem 0 0 0;
                       font-style:italic; opacity:0.9;'>
                 A inteligência que acende a sua obra.
             </p>

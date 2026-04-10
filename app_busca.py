@@ -185,8 +185,8 @@ def mostrar_login():
         " margin:1.5rem 0 0.4rem 0; letter-spacing:2px; font-family: Arial Black, sans-serif;'>LÚMEN BOT</h1>"
         "<p style='color:white; font-size:clamp(0.85rem,3vw,1rem); margin:0 0 1.5rem 0;"
         " font-style:italic; opacity:0.9;'>A inteligência que acende a sua obra.</p>"
-        "<span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;"
-        " padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>Login</span>"
+        #"<span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;"
+        #" padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>Login</span>"
         "</div>",
         unsafe_allow_html=True
     )

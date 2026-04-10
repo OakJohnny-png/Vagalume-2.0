@@ -20,6 +20,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
 try:
+    import bcrypt
+    BCRYPT_OK = True
+except ImportError:
+    import hashlib
+    BCRYPT_OK = False
+
+try:
     import pdfplumber
     PDF_DISPONIVEL = True
 except ImportError:
@@ -37,13 +44,13 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Constantes e caminhos
 # ---------------------------------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR          = os.path.dirname(os.path.abspath(__file__))
 EXCEL_PATH        = os.path.join(BASE_DIR, "estoque.xlsx")
 HISTORICO_DIR     = os.path.join(BASE_DIR, "historico_devolucoes")
 REQUISICOES_DIR   = os.path.join(BASE_DIR, "historico_requisicoes")
 RASCUNHO_PATH     = os.path.join(BASE_DIR, "rascunho_solicitacao.json")
+USUARIOS_PATH     = os.path.join(BASE_DIR, "usuarios.json")
 
-# Arquivos de referência para selectboxes
 REF_CLIENTES      = os.path.join(BASE_DIR, "clientes.xlsx")
 REF_VENDEDORES    = os.path.join(BASE_DIR, "vendedores.xlsx")
 REF_COMPRADORES   = os.path.join(BASE_DIR, "compradores.xlsx")
@@ -54,52 +61,215 @@ os.makedirs(HISTORICO_DIR, exist_ok=True)
 os.makedirs(REQUISICOES_DIR, exist_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# CSS global — responsividade mobile/tablet
-# ---------------------------------------------------------------------------
-st.markdown("""
-<style>
-    /* Sidebar compacta */
-    [data-testid="stSidebar"] {
-        min-width: 220px !important;
-        max-width: 260px !important;
-    }
-    /* Conteúdo principal */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem !important;
-    }
-    /* Botões de rádio da sidebar maiores */
-    [data-testid="stSidebar"] .stRadio label {
-        font-size: 1rem !important;
-        padding: 6px 0 !important;
-    }
-    /* Tabelas responsivas */
-    [data-testid="stDataFrame"] {
-        overflow-x: auto !important;
-    }
-    /* Sub-abas */
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 0.95rem;
-        font-weight: 600;
-    }
-    /* Mobile */
-    @media (max-width: 768px) {
-        .block-container {
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
+# ===========================================================================
+# FUNÇÕES DE AUTENTICAÇÃO
+# ===========================================================================
+
+def _hash_senha(senha: str) -> str:
+    if BCRYPT_OK:
+        return bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+    else:
+        return hashlib.sha256(senha.encode()).hexdigest()
+
+
+def _verificar_senha(senha: str, hash_salvo: str) -> bool:
+    if BCRYPT_OK:
+        try:
+            return bcrypt.checkpw(senha.encode(), hash_salvo.encode())
+        except Exception:
+            return False
+    else:
+        return hashlib.sha256(senha.encode()).hexdigest() == hash_salvo
+
+
+def carregar_usuarios() -> dict:
+    """Carrega o arquivo de usuários. Cria admin padrão se não existir."""
+    if not os.path.exists(USUARIOS_PATH):
+        usuarios = {
+            "admin": {
+                "nome": "Administrador",
+                "senha_hash": _hash_senha("Ameixaseca9988?"),
+                "perfil": "admin",
+                "ativo": True,
+            }
         }
-        h1 { font-size: 1.8rem !important; }
-        h2 { font-size: 1.3rem !important; }
-        h3 { font-size: 1.1rem !important; }
-    }
-</style>
-""", unsafe_allow_html=True)
+        salvar_usuarios(usuarios)
+        return usuarios
+    try:
+        with open(USUARIOS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
-# ---------------------------------------------------------------------------
-# Funções auxiliares — LÚMEN BOT
-# ---------------------------------------------------------------------------
+def salvar_usuarios(usuarios: dict):
+    with open(USUARIOS_PATH, "w", encoding="utf-8") as f:
+        json.dump(usuarios, f, ensure_ascii=False, indent=4)
+
+
+def autenticar(usuario: str, senha: str) -> bool:
+    usuarios = carregar_usuarios()
+    u = usuarios.get(usuario.strip().lower())
+    if not u:
+        return False
+    if not u.get("ativo", True):
+        return False
+    return _verificar_senha(senha, u["senha_hash"])
+
+
+def get_perfil(usuario: str) -> str:
+    usuarios = carregar_usuarios()
+    u = usuarios.get(usuario.strip().lower(), {})
+    return u.get("perfil", "usuario")
+
+
+# ===========================================================================
+# TELA DE LOGIN
+# ===========================================================================
+
+def mostrar_login():
+    # CSS da tela de login
+    st.markdown("""
+    <style>
+        /* Esconde sidebar e header padrão na tela de login */
+        [data-testid="stSidebar"] { display: none !important; }
+        header { display: none !important; }
+        #MainMenu { display: none !important; }
+        footer { display: none !important; }
+
+        /* Fundo vermelho full-screen */
+        .stApp {
+            background-color: #FF2800 !important;
+        }
+        .block-container {
+            padding: 0 !important;
+            max-width: 100% !important;
+        }
+
+        /* Labels dos inputs em branco */
+        label { color: white !important; font-size: 1rem !important; font-weight: 500 !important; }
+
+        /* Inputs brancos com borda */
+        input[type="text"], input[type="password"] {
+            background-color: white !important;
+            border-radius: 8px !important;
+            border: none !important;
+            font-size: 1rem !important;
+            padding: 0.6rem 1rem !important;
+        }
+
+        /* Botão de login amarelo */
+        div[data-testid="stForm"] button[kind="primaryFormSubmit"],
+        div[data-testid="stForm"] button {
+            background-color: #FEA700 !important;
+            color: #000 !important;
+            font-weight: 700 !important;
+            font-size: 1.1rem !important;
+            border-radius: 10px !important;
+            border: none !important;
+            width: 100% !important;
+            padding: 0.7rem !important;
+        }
+
+        /* Mensagem de erro */
+        .login-erro {
+            color: #fff;
+            background-color: rgba(0,0,0,0.25);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            text-align: center;
+            margin-top: 0.5rem;
+            font-weight: 600;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Header: NEMA logo + título + botão login (decorativo)
+    col_logo, col_titulo, col_btn = st.columns([2, 5, 2])
+    with col_logo:
+        st.markdown("""
+        <div style='padding: 1.5rem 1rem 1rem 2rem;'>
+            <div style='border: 3px solid white; display:inline-block; padding: 4px 10px;'>
+                <span style='color:white; font-size:2rem; font-weight:900; letter-spacing:2px;
+                             font-family: Arial Black, sans-serif;'>N<span style='font-size:1.4rem;'>E</span>M<span style='font-size:1.4rem;'>A</span></span>
+            </div>
+            <div style='border-top: 3px solid white; margin-top:4px; width:90%;'></div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_titulo:
+        st.markdown("""
+        <div style='padding: 1.5rem 0 0 0;'>
+            <h1 style='color:white; font-size:clamp(1.8rem,5vw,3rem); font-weight:900;
+                       margin:0; letter-spacing:1px; font-family: Arial Black, sans-serif;'>
+                LÚMEN BOT
+            </h1>
+            <p style='color:white; font-size:clamp(0.8rem,2vw,1rem); margin:0.2rem 0 0 0;
+                      font-style:italic; opacity:0.9;'>
+                A inteligência que acende a sua obra.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_btn:
+        st.markdown("""
+        <div style='padding: 1.8rem 2rem 0 0; text-align:right;'>
+            <span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;
+                         padding: 0.6rem 2rem; border-radius:10px; display:inline-block;'>
+                Login
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Área central do formulário
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    col_esq, col_form, col_dir = st.columns([1, 2, 1])
+    with col_form:
+        # Ícone do robô
+        st.markdown("""
+        <div style='text-align:center; font-size:4rem; margin-bottom:0.5rem;'>🤖</div>
+        """, unsafe_allow_html=True)
+
+        with st.form("form_login", clear_on_submit=False):
+            usuario_input = st.text_input("Usuário", placeholder="", key="login_usuario")
+            senha_input   = st.text_input("Senha", type="password", placeholder="", key="login_senha")
+            st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
+
+        if entrar:
+            if autenticar(usuario_input, senha_input):
+                st.session_state.logado = True
+                st.session_state.usuario_logado = usuario_input.strip().lower()
+                st.session_state.perfil_logado = get_perfil(usuario_input.strip().lower())
+                st.session_state.pagina_atual = "🏠 Início"
+                st.rerun()
+            else:
+                st.markdown(
+                    "<div class='login-erro'>❌ Usuário ou senha incorretos.</div>",
+                    unsafe_allow_html=True
+                )
+
+    # Espaçador
+    st.markdown("<div style='height: 4rem;'></div>", unsafe_allow_html=True)
+
+    # Rodapé escuro
+    st.markdown("""
+    <div style='background-color:#8B0000; padding: 1.5rem 2rem; margin-top: 2rem;'>
+        <p style='color:#ccc; font-size:0.8rem; margin:0;'>
+            © 2024 <strong>NEMA TECNOLOGIA | LÚMEN BOT</strong> v1.0 | Rio do Sul, SC |
+            Todos os direitos reservados.
+        </p>
+        <p style='color:#ccc; font-size:0.8rem; margin:0.3rem 0 0 0;'>
+            Este sistema é para uso autorizado e monitorado para a manutenção e gerenciamento
+            de iluminação pública na região. Em caso de dúvidas, contate o suporte técnico
+            NEMA no telefone (47) 5555-0199.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ===========================================================================
+# FUNÇÕES AUXILIARES — APP PRINCIPAL
+# ===========================================================================
 
 @st.cache_data
 def carregar_estoque() -> pd.DataFrame:
@@ -179,19 +349,13 @@ def df_lista_vazio() -> pd.DataFrame:
     return pd.DataFrame(columns=["Código", "Descrição", "Localização", "Quantidade"])
 
 
-# ---------------------------------------------------------------------------
-# Persistência de rascunho de solicitação manual
-# ---------------------------------------------------------------------------
-
 def salvar_rascunho(cabecalho: dict, itens: list):
-    """Salva o rascunho atual da solicitação manual em arquivo JSON."""
     dados = {"cabecalho": cabecalho, "itens": itens}
     with open(RASCUNHO_PATH, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
 
 def carregar_rascunho() -> dict:
-    """Carrega o rascunho salvo, se existir."""
     if os.path.exists(RASCUNHO_PATH):
         try:
             with open(RASCUNHO_PATH, "r", encoding="utf-8") as f:
@@ -202,16 +366,17 @@ def carregar_rascunho() -> dict:
 
 
 def limpar_rascunho():
-    """Remove o arquivo de rascunho."""
     if os.path.exists(RASCUNHO_PATH):
         os.remove(RASCUNHO_PATH)
 
 
-# ---------------------------------------------------------------------------
-# Inicialização do session_state com persistência
-# ---------------------------------------------------------------------------
-
 def inicializar_session_state():
+    if "logado" not in st.session_state:
+        st.session_state.logado = False
+    if "usuario_logado" not in st.session_state:
+        st.session_state.usuario_logado = ""
+    if "perfil_logado" not in st.session_state:
+        st.session_state.perfil_logado = "usuario"
     if "lista_devolucao" not in st.session_state:
         st.session_state.lista_devolucao = df_lista_vazio()
     if "empresa" not in st.session_state:
@@ -222,7 +387,6 @@ def inicializar_session_state():
         st.session_state.req_cabecalho = {}
     if "req_itens" not in st.session_state:
         st.session_state.req_itens = []
-    # Carrega rascunho salvo se existir
     if "req_manual_itens" not in st.session_state:
         rascunho = carregar_rascunho()
         st.session_state.req_manual_itens = rascunho.get("itens", [])
@@ -285,18 +449,6 @@ def listar_historico() -> list:
     return registros
 
 
-def carregar_historico_na_sessao(registro: dict):
-    st.session_state.protocolo = registro["protocolo"]
-    st.session_state.empresa = registro["empresa"]
-    itens = registro["itens"]
-    if itens:
-        df = pd.DataFrame(itens)
-        df["Quantidade"] = pd.to_numeric(df["Quantidade"], errors="coerce").fillna(0).astype(int)
-        st.session_state.lista_devolucao = df
-    else:
-        st.session_state.lista_devolucao = df_lista_vazio()
-
-
 # ---------------------------------------------------------------------------
 # Funções auxiliares — PROCESSADOR DE CHAMADOS IP
 # ---------------------------------------------------------------------------
@@ -311,8 +463,7 @@ ROUTES = {
 
 
 def processar_chamados(
-    uploaded_file,
-    fonte_escolhida,
+    uploaded_file, fonte_escolhida,
     cor_fundo_rota, cor_fonte_rota, tamanho_rota,
     cor_fundo_bairro, cor_fonte_bairro, tamanho_bairro,
     cor_fundo_prob, cor_fonte_prob, tamanho_prob,
@@ -629,21 +780,69 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     return output.getvalue()
 
 
-# ---------------------------------------------------------------------------
-# Inicialização
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# INICIALIZAÇÃO
+# ===========================================================================
 inicializar_session_state()
-df_estoque = carregar_estoque()
 
+# Garante que o arquivo de usuários existe
+carregar_usuarios()
+
+# ---------------------------------------------------------------------------
+# CONTROLE DE FLUXO: LOGIN ou APP
+# ---------------------------------------------------------------------------
+if not st.session_state.logado:
+    mostrar_login()
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# CSS do app principal (só carrega após login)
+# ---------------------------------------------------------------------------
+st.markdown("""
+<style>
+    [data-testid="stSidebar"] {
+        min-width: 220px !important;
+        max-width: 260px !important;
+    }
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 2rem !important;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        font-size: 1rem !important;
+        padding: 6px 0 !important;
+    }
+    [data-testid="stDataFrame"] {
+        overflow-x: auto !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        h1 { font-size: 1.8rem !important; }
+        h2 { font-size: 1.3rem !important; }
+        h3 { font-size: 1.1rem !important; }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Carrega dados
+# ---------------------------------------------------------------------------
+df_estoque = carregar_estoque()
 lista_clientes      = carregar_clientes()
 lista_vendedores    = carregar_vendedores()
 lista_compradores   = carregar_compradores()
 lista_tipos_venda   = carregar_tipos_venda()
 lista_departamentos = carregar_departamentos()
 
-
 # ---------------------------------------------------------------------------
-# SIDEBAR — Navegação principal (funciona bem no mobile)
+# SIDEBAR — Navegação principal
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("""
@@ -658,18 +857,33 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     st.markdown("---")
 
+    # Monta lista de páginas conforme perfil
+    paginas_disponiveis = ["🏠 Início", "🔍 Finder", "💡 Chamados IP", "📋 Solicitação de Materiais"]
+    if st.session_state.perfil_logado == "admin":
+        paginas_disponiveis.append("👤 Gestão de Usuários")
+
+    # Garante que a página atual é válida
+    if st.session_state.pagina_atual not in paginas_disponiveis:
+        st.session_state.pagina_atual = "🏠 Início"
+
     pagina = st.radio(
         "Navegação",
-        ["🏠 Início", "🔍 Finder", "💡 Chamados IP", "📋 Solicitação de Materiais"],
-        index=["🏠 Início", "🔍 Finder", "💡 Chamados IP", "📋 Solicitação de Materiais"].index(
-            st.session_state.pagina_atual
-        ),
+        paginas_disponiveis,
+        index=paginas_disponiveis.index(st.session_state.pagina_atual),
         label_visibility="collapsed",
     )
     st.session_state.pagina_atual = pagina
 
     st.markdown("---")
+    st.caption(f"👤 {st.session_state.usuario_logado}  |  {st.session_state.perfil_logado}")
     st.caption(f"Estoque: {len(df_estoque)} itens")
+
+    if st.button("🚪 Sair", use_container_width=True):
+        st.session_state.logado = False
+        st.session_state.usuario_logado = ""
+        st.session_state.perfil_logado = "usuario"
+        st.session_state.pagina_atual = "🏠 Início"
+        st.rerun()
 
 
 # ===========================================================================
@@ -767,7 +981,7 @@ elif pagina == "💡 Chamados IP":
 
     if uploaded_file is not None:
         if st.button("Processar Planilha", key="btn_processar"):
-            with st.spinner('Lendo e processando os dados... Isso pode levar alguns segundos.'):
+            with st.spinner('Lendo e processando os dados...'):
                 try:
                     dados_excel = processar_chamados(
                         uploaded_file, fonte_escolhida,
@@ -799,13 +1013,12 @@ elif pagina == "📋 Solicitação de Materiais":
         "📂 Solicitações",
     ])
 
-    # =======================================================================
+    # -------------------------------------------------------------------
     # SUB-ABA: CRIAR MANUALMENTE
-    # =======================================================================
+    # -------------------------------------------------------------------
     with sub_manual:
         st.subheader("✏️ Nova Solicitação Manual")
 
-        # Aviso de rascunho salvo
         rascunho_existente = carregar_rascunho()
         if rascunho_existente and rascunho_existente.get("itens"):
             st.info(
@@ -813,10 +1026,7 @@ elif pagina == "📋 Solicitação de Materiais":
                 "Os dados foram restaurados automaticamente."
             )
 
-        st.markdown("Preencha os dados abaixo. Código, Descrição e Localização são buscados automaticamente do estoque.")
         st.markdown("---")
-
-        # --- CABEÇALHO MANUAL ---
         st.subheader("📌 Dados do Cabeçalho")
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -852,8 +1062,6 @@ elif pagina == "📋 Solicitação de Materiais":
             man_observacao = st.text_input("Observação", key="man_observacao")
 
         st.markdown("---")
-
-        # --- ADICIONAR ITENS ---
         st.subheader("📦 Adicionar Itens")
         col_busca, col_qtd, col_un = st.columns([3, 1, 1])
 
@@ -907,7 +1115,6 @@ elif pagina == "📋 Solicitação de Materiais":
                     "Quantidade": float(man_quantidade),
                 }
                 st.session_state.req_manual_itens.append(novo_item)
-                # Salva rascunho automaticamente
                 salvar_rascunho(
                     {"tipo_pedido": man_tipo_pedido, "cliente_cod": man_cliente_cod,
                      "cliente_nome": man_cliente_nome},
@@ -916,8 +1123,6 @@ elif pagina == "📋 Solicitação de Materiais":
                 st.success(f"✅ Item **{man_item_sel['Descrição']}** adicionado.")
 
         st.markdown("---")
-
-        # --- LISTA DE ITENS ATUAL ---
         st.subheader(f"📝 Lista de Itens ({len(st.session_state.req_manual_itens)} item(ns))")
 
         if st.session_state.req_manual_itens:
@@ -950,8 +1155,6 @@ elif pagina == "📋 Solicitação de Materiais":
             st.info("Nenhum item adicionado ainda.")
 
         st.markdown("---")
-
-        # --- SALVAR / EXPORTAR ---
         st.subheader("💾 Salvar / Exportar")
         st.info(
             "ℹ️ O **Nº da Solicitação** é gerado automaticamente ao salvar, "
@@ -983,7 +1186,6 @@ elif pagina == "📋 Solicitação de Materiais":
                     cab_man = _montar_cabecalho_manual()
                     nome_salvo = salvar_requisicao(cab_man, st.session_state.req_manual_itens)
                     num_gerado = cab_man.get("num_solicitacao", "—")
-                    # Limpa rascunho após salvar
                     limpar_rascunho()
                     st.session_state.req_manual_itens = []
                     st.success(f"✅ Solicitação salva! Nº: **{num_gerado}** | Arquivo: **{nome_salvo}**")
@@ -1001,24 +1203,20 @@ elif pagina == "📋 Solicitação de Materiais":
                     key="btn_dl_man"
                 )
 
-    # =======================================================================
+    # -------------------------------------------------------------------
     # SUB-ABA: IMPORTAR VIA PDF
-    # =======================================================================
+    # -------------------------------------------------------------------
     with sub_pdf:
         st.subheader("📄 Importar Solicitação via PDF")
         st.markdown(
             "Faça o upload de um arquivo PDF de requisição de materiais. "
-            "O sistema irá **ler, interpretar e extrair** automaticamente os dados do cabeçalho e a lista de itens."
+            "O sistema irá **ler, interpretar e extrair** automaticamente os dados."
         )
 
         if not PDF_DISPONIVEL:
-            st.error(
-                "❌ A biblioteca **pdfplumber** não está instalada. "
-                "Execute `pip install pdfplumber` no terminal e reinicie o aplicativo."
-            )
+            st.error("❌ A biblioteca **pdfplumber** não está instalada. Execute `pip install pdfplumber`.")
         else:
             st.markdown("---")
-
             pdf_upload = st.file_uploader(
                 "Selecione o arquivo PDF da requisição:",
                 type=["pdf"],
@@ -1060,14 +1258,10 @@ elif pagina == "📋 Solicitação de Materiais":
                         df_itens = pd.DataFrame(itens)
                         st.dataframe(df_itens, use_container_width=True, hide_index=True)
                     else:
-                        st.warning("Nenhum item foi extraído do PDF. Verifique o formato do arquivo.")
+                        st.warning("Nenhum item foi extraído do PDF.")
 
                     st.markdown("---")
                     st.subheader("💾 Ações")
-                    st.info(
-                        "ℹ️ O **Nº da Solicitação** é gerado automaticamente ao salvar, "
-                        "vinculando o Nº do Orçamento PDF ao sistema."
-                    )
                     col_a1, col_a2 = st.columns(2)
                     with col_a1:
                         if st.button("💾 Salvar no Sistema", use_container_width=True, key="btn_salvar_req"):
@@ -1089,9 +1283,9 @@ elif pagina == "📋 Solicitação de Materiais":
                                 key="btn_download_req"
                             )
 
-    # =======================================================================
-    # SUB-ABA: SOLICITAÇÕES (HISTÓRICO AGRUPADO POR CLIENTE)
-    # =======================================================================
+    # -------------------------------------------------------------------
+    # SUB-ABA: SOLICITAÇÕES (HISTÓRICO)
+    # -------------------------------------------------------------------
     with sub_historico:
         st.subheader("📂 Solicitações")
 
@@ -1145,3 +1339,132 @@ elif pagina == "📋 Solicitação de Materiais":
                             key=f"re_export_{req['num_solicitacao']}"
                         )
                 st.markdown("---")
+
+
+# ===========================================================================
+# PÁGINA: GESTÃO DE USUÁRIOS (somente admin)
+# ===========================================================================
+elif pagina == "👤 Gestão de Usuários":
+    if st.session_state.perfil_logado != "admin":
+        st.error("❌ Acesso negado. Esta página é exclusiva para administradores.")
+        st.stop()
+
+    st.title("👤 Gestão de Usuários")
+    st.markdown("Gerencie os usuários do sistema. Apenas o **administrador** tem acesso a esta página.")
+
+    usuarios_atuais = carregar_usuarios()
+
+    # --- Lista de usuários ---
+    st.subheader("📋 Usuários Cadastrados")
+    dados_tabela = []
+    for login, info in usuarios_atuais.items():
+        dados_tabela.append({
+            "Login": login,
+            "Nome": info.get("nome", "—"),
+            "Perfil": info.get("perfil", "usuario"),
+            "Ativo": "✅ Sim" if info.get("ativo", True) else "❌ Não",
+        })
+    if dados_tabela:
+        st.dataframe(pd.DataFrame(dados_tabela), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # --- Cadastrar novo usuário ---
+    st.subheader("➕ Cadastrar Novo Usuário")
+    with st.form("form_novo_usuario", clear_on_submit=True):
+        col_u1, col_u2 = st.columns(2)
+        with col_u1:
+            novo_login  = st.text_input("Login (sem espaços)", placeholder="ex: joao.silva")
+            novo_nome   = st.text_input("Nome completo", placeholder="ex: João Silva")
+        with col_u2:
+            novo_perfil = st.selectbox("Perfil", ["usuario", "admin"])
+            nova_senha  = st.text_input("Senha", type="password")
+            conf_senha  = st.text_input("Confirmar Senha", type="password")
+
+        salvar_novo = st.form_submit_button("✅ Cadastrar Usuário", use_container_width=True)
+
+    if salvar_novo:
+        novo_login = novo_login.strip().lower()
+        if not novo_login or not nova_senha or not novo_nome:
+            st.error("Preencha todos os campos.")
+        elif nova_senha != conf_senha:
+            st.error("As senhas não coincidem.")
+        elif novo_login in usuarios_atuais:
+            st.error(f"O login '{novo_login}' já existe.")
+        elif len(nova_senha) < 6:
+            st.error("A senha deve ter pelo menos 6 caracteres.")
+        else:
+            usuarios_atuais[novo_login] = {
+                "nome": novo_nome.strip(),
+                "senha_hash": _hash_senha(nova_senha),
+                "perfil": novo_perfil,
+                "ativo": True,
+            }
+            salvar_usuarios(usuarios_atuais)
+            st.success(f"✅ Usuário **{novo_login}** cadastrado com sucesso!")
+            st.rerun()
+
+    st.markdown("---")
+
+    # --- Alterar senha ---
+    st.subheader("🔑 Alterar Senha de Usuário")
+    with st.form("form_alterar_senha", clear_on_submit=True):
+        logins_disponiveis = list(usuarios_atuais.keys())
+        login_alterar = st.selectbox("Selecione o usuário", logins_disponiveis, key="sel_alterar")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            nova_senha_alt = st.text_input("Nova Senha", type="password", key="nova_senha_alt")
+        with col_s2:
+            conf_senha_alt = st.text_input("Confirmar Nova Senha", type="password", key="conf_senha_alt")
+        alterar_btn = st.form_submit_button("🔑 Alterar Senha", use_container_width=True)
+
+    if alterar_btn:
+        if not nova_senha_alt:
+            st.error("Digite a nova senha.")
+        elif nova_senha_alt != conf_senha_alt:
+            st.error("As senhas não coincidem.")
+        elif len(nova_senha_alt) < 6:
+            st.error("A senha deve ter pelo menos 6 caracteres.")
+        else:
+            usuarios_atuais[login_alterar]["senha_hash"] = _hash_senha(nova_senha_alt)
+            salvar_usuarios(usuarios_atuais)
+            st.success(f"✅ Senha do usuário **{login_alterar}** alterada com sucesso!")
+
+    st.markdown("---")
+
+    # --- Ativar / Desativar usuário ---
+    st.subheader("🔒 Ativar / Desativar Usuário")
+    logins_nao_admin = [l for l in usuarios_atuais.keys() if l != "admin"]
+    if logins_nao_admin:
+        with st.form("form_ativar_desativar", clear_on_submit=False):
+            login_toggle = st.selectbox("Selecione o usuário", logins_nao_admin, key="sel_toggle")
+            status_atual = usuarios_atuais[login_toggle].get("ativo", True)
+            acao_label = "🔒 Desativar" if status_atual else "🔓 Ativar"
+            toggle_btn = st.form_submit_button(acao_label, use_container_width=True)
+
+        if toggle_btn:
+            usuarios_atuais[login_toggle]["ativo"] = not status_atual
+            salvar_usuarios(usuarios_atuais)
+            acao_str = "desativado" if status_atual else "ativado"
+            st.success(f"✅ Usuário **{login_toggle}** {acao_str} com sucesso!")
+            st.rerun()
+    else:
+        st.info("Nenhum outro usuário cadastrado além do admin.")
+
+    st.markdown("---")
+
+    # --- Excluir usuário ---
+    st.subheader("🗑️ Excluir Usuário")
+    logins_excluiveis = [l for l in usuarios_atuais.keys() if l != "admin"]
+    if logins_excluiveis:
+        with st.form("form_excluir", clear_on_submit=False):
+            login_excluir = st.selectbox("Selecione o usuário para excluir", logins_excluiveis, key="sel_excluir")
+            excluir_btn = st.form_submit_button("🗑️ Excluir Usuário", use_container_width=True)
+
+        if excluir_btn:
+            del usuarios_atuais[login_excluir]
+            salvar_usuarios(usuarios_atuais)
+            st.success(f"✅ Usuário **{login_excluir}** excluído com sucesso!")
+            st.rerun()
+    else:
+        st.info("Nenhum outro usuário para excluir além do admin.")

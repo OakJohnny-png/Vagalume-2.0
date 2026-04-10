@@ -606,148 +606,103 @@ def processar_chamados(
 def extrair_dados_requisicao(pdf_bytes) -> dict:
     cabecalho = {}
     itens = []
- 
+
     with pdfplumber.open(pdf_bytes) as pdf:
         texto_completo = ""
         for page in pdf.pages:
             t = page.extract_text()
             if t:
                 texto_completo += t + "\n"
- 
+
     linhas = texto_completo.split("\n")
- 
-    # --- Extração do cabeçalho ---
+
     for linha in linhas:
-        if not cabecalho.get('orcamento_pdf'):
-            m = re.search(r'Or[çc]amento[:\s#Nº°.]*(\d+)', linha, re.IGNORECASE)
-            if m:
-                cabecalho['orcamento_pdf'] = m.group(1).strip()
- 
-        if not cabecalho.get('cliente_nome'):
-            m = re.search(r'Cliente[:\s]+(\d+)\s+(.+?)(?=\s{2,}|Comprador|Vendedor|$)', linha, re.IGNORECASE)
-            if m:
-                cabecalho['cliente_cod'] = m.group(1).strip()
-                cabecalho['cliente_nome'] = m.group(2).strip()
- 
-        if not cabecalho.get('vendedor'):
-            m = re.search(r'Vendedor[.:\s]+(.+?)(?=\s{2,}|Prazo|Comprador|$)', linha, re.IGNORECASE)
-            if m:
-                v = m.group(1).strip()
-                if v:
-                    cabecalho['vendedor'] = v
- 
-        if not cabecalho.get('comprador'):
-            m = re.search(r'Comprador[.:\s]+(.+?)(?=\s{2,}|Em\.|$)', linha, re.IGNORECASE)
-            if m:
-                val = re.sub(r'Em\.+:\s*\S+', '', m.group(1)).strip()
-                if val:
-                    cabecalho['comprador'] = val
- 
-        if not cabecalho.get('tipo_venda'):
-            m = re.search(r'Tipo\s+de\s+Venda[.:\s]+(.+)', linha, re.IGNORECASE)
-            if m:
-                cabecalho['tipo_venda'] = m.group(1).strip()
- 
-        if not cabecalho.get('departamento'):
-            m = re.search(r'Departamento[.:\s]+(.+)', linha, re.IGNORECASE)
-            if m:
-                cabecalho['departamento'] = m.group(1).strip()
- 
-        if not cabecalho.get('marcacoes'):
-            m = re.search(r'Marca[çc][oõ]es?[.:\s]+(.+)', linha, re.IGNORECASE)
-            if m:
-                val = m.group(1).strip().lstrip(':').strip()
-                cabecalho['marcacoes'] = val if val else "—"
- 
-        if not cabecalho.get('observacao'):
-            m = re.search(r'Observa[çc][aã]o\s*[:\s]+(.+)', linha, re.IGNORECASE)
-            if m:
-                cabecalho['observacao'] = m.group(1).strip()
- 
-    # --- Extração de itens ---
-    # Unidades válidas
-    _UN = r'(?:PC|KG|MT|CX|PAR|VB|SC|BD|GL|TB|KIT|FD|CJ|JG|RL|LT|UN|M\b)'
- 
-    # Padrão 1: SEQ  COD  DESCRICAO  UN  QTD  (com espaço antes da UN)
-    p1 = re.compile(
-        r'^(\d{1,3})\s+(\d{3,8})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
+        m = re.search(r'Orçamento[:\s]+(\d+)', linha)
+        if m and 'orcamento_pdf' not in cabecalho:
+            cabecalho['orcamento_pdf'] = m.group(1).strip()
+
+        m = re.search(r'Cliente[:\s]+(\d+)\s+(.+?)(?=\s{2,}|Comprador|$)', linha)
+        if m and 'cliente_nome' not in cabecalho:
+            cabecalho['cliente_cod'] = m.group(1).strip()
+            cabecalho['cliente_nome'] = m.group(2).strip()
+
+        m = re.search(r'Vendedor[.\s:]+(.+?)(?=\s{2,}|Prazo|$)', linha)
+        if m and 'vendedor' not in cabecalho:
+            cabecalho['vendedor'] = m.group(1).strip()
+
+        m = re.search(r'Comprador[.\s:]+(.+?)(?=\s{2,}|Em\.\.|$)', linha)
+        if m and 'comprador' not in cabecalho:
+            val = re.sub(r'Em\.+:\s*\S+', '', m.group(1)).strip()
+            if val:
+                cabecalho['comprador'] = val
+
+        m = re.search(r'Tipo de Venda[.\s:]+(.+)', linha)
+        if m and 'tipo_venda' not in cabecalho:
+            cabecalho['tipo_venda'] = m.group(1).strip()
+
+        m = re.search(r'Departamento[.\s:]+(.+)', linha)
+        if m and 'departamento' not in cabecalho:
+            cabecalho['departamento'] = m.group(1).strip()
+
+        m = re.search(r'Marcações[.\s:]+(.+)', linha)
+        if m and 'marcacoes' not in cabecalho:
+            val = m.group(1).strip().lstrip(':').strip()
+            cabecalho['marcacoes'] = val if val else "—"
+
+        m = re.search(r'Observação\s*:\s*(.+)', linha)
+        if m and 'observacao' not in cabecalho:
+            cabecalho['observacao'] = m.group(1).strip()
+
+    _UN = r'PC|KG|MT|CX|PAR|VB|SC|BD|GL|TB|KIT|FD|CJ|JG|RL|LT|UN|M'
+
+    padrao_normal = re.compile(
+        r'^(\d{2})\s+(\d{4,6})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
         re.IGNORECASE
     )
-    # Padrão 2: SEQ  COD  DESCRICAOUN  QTD  (UN colada na descrição)
-    p2 = re.compile(
-        r'^(\d{1,3})\s+(\d{3,8})\s+(.+?)(' + _UN + r')\s+([\d.,]+)\s*$',
+    padrao_colado = re.compile(
+        r'^(\d{2})\s+(\d{4,6})\s+(.+?)(' + _UN + r')\s+([\d.,]+)$',
         re.IGNORECASE
     )
-    # Padrão 3: só COD  DESCRICAO  UN  QTD (sem sequencial)
-    p3 = re.compile(
-        r'^(\d{3,8})\s+(.+?)\s+(' + _UN + r')\s+([\d.,]+)',
-        re.IGNORECASE
-    )
- 
-    seq_auto = 1
+
     for linha in linhas:
         linha_strip = linha.strip()
-        if not linha_strip:
-            continue
- 
-        m = p1.match(linha_strip)
+        m = padrao_normal.match(linha_strip)
         if m:
+            seq, codigo = m.group(1), m.group(2)
+            descricao = m.group(3).strip()
+            unidade = m.group(4).upper()
             try:
-                qtd = float(m.group(5).replace(',', '.'))
+                quantidade = float(m.group(5).replace(',', '.'))
             except ValueError:
-                qtd = 0.0
+                quantidade = 0.0
             itens.append({
-                "Seq": f"{int(m.group(1)):02d}",
-                "Localização": "",
-                "Código": m.group(2),
-                "Descrição": m.group(3).strip(),
-                "UN": m.group(4).upper(),
-                "Quantidade": qtd,
+                "Seq": seq, "Localização": "", "Código": codigo,
+                "Descrição": descricao, "UN": unidade, "Quantidade": quantidade,
             })
-            seq_auto = int(m.group(1)) + 1
             continue
- 
-        m = p2.match(linha_strip)
+
+        m = padrao_colado.match(linha_strip)
         if m:
+            seq, codigo = m.group(1), m.group(2)
+            descricao = m.group(3).strip()
+            unidade = m.group(4).upper()
             try:
-                qtd = float(m.group(5).replace(',', '.'))
+                quantidade = float(m.group(5).replace(',', '.'))
             except ValueError:
-                qtd = 0.0
+                quantidade = 0.0
             itens.append({
-                "Seq": f"{int(m.group(1)):02d}",
-                "Localização": "",
-                "Código": m.group(2),
-                "Descrição": m.group(3).strip(),
-                "UN": m.group(4).upper(),
-                "Quantidade": qtd,
+                "Seq": seq, "Localização": "", "Código": codigo,
+                "Descrição": descricao, "UN": unidade, "Quantidade": quantidade,
             })
-            seq_auto = int(m.group(1)) + 1
-            continue
- 
-        m = p3.match(linha_strip)
-        if m:
-            try:
-                qtd = float(m.group(4).replace(',', '.'))
-            except ValueError:
-                qtd = 0.0
-            itens.append({
-                "Seq": f"{seq_auto:02d}",
-                "Localização": "",
-                "Código": m.group(1),
-                "Descrição": m.group(2).strip(),
-                "UN": m.group(3).upper(),
-                "Quantidade": qtd,
-            })
-            seq_auto += 1
- 
+
     return {"cabecalho": cabecalho, "itens": itens}
- 
- 
+
+
 def salvar_requisicao(cabecalho: dict, itens: list) -> str:
     cliente_cod = cabecalho.get('cliente_cod', '0')
     num_sol = gerar_numero_solicitacao(cliente_cod)
     cabecalho['num_solicitacao'] = num_sol
- 
+
     nome_arquivo = f"SOL_{num_sol}.json"
     caminho = os.path.join(REQUISICOES_DIR, nome_arquivo)
     dados = {
@@ -758,8 +713,8 @@ def salvar_requisicao(cabecalho: dict, itens: list) -> str:
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
     return nome_arquivo
- 
- 
+
+
 def listar_requisicoes() -> list:
     arquivos = sorted(
         glob.glob(os.path.join(REQUISICOES_DIR, "SOL_*.json")),
@@ -785,13 +740,13 @@ def listar_requisicoes() -> list:
             "itens": dados.get("itens", []),
         })
     return registros
- 
- 
+
+
 def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Solicitação"
- 
+
     fonte_titulo    = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
     fill_titulo     = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
     fonte_cab_label = Font(name="Calibri", size=10, bold=True)
@@ -807,16 +762,16 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     )
     alinhamento_centro = Alignment(horizontal="center", vertical="center")
     alinhamento_esq    = Alignment(horizontal="left", vertical="center", wrap_text=True)
- 
+
     linha = 1
- 
+
     ws.merge_cells(f"A{linha}:G{linha}")
     cell = ws.cell(row=linha, column=1, value="SOLICITAÇÃO DE MATERIAIS — LÚMEN BOT / NEMA")
     cell.font = fonte_titulo; cell.fill = fill_titulo
     cell.alignment = alinhamento_centro
     ws.row_dimensions[linha].height = 22
     linha += 1
- 
+
     campos_cab = [
         ("Nº Solicitação", cabecalho.get("num_solicitacao", "—")),
         ("Nº Orçamento PDF", cabecalho.get("orcamento_pdf", "—")),
@@ -829,32 +784,32 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
         ("Marcações", cabecalho.get("marcacoes", "—")),
         ("Observação", cabecalho.get("observacao", "—")),
     ]
- 
+
     for label, valor in campos_cab:
         ws.merge_cells(f"A{linha}:B{linha}")
         cell_label = ws.cell(row=linha, column=1, value=label)
         cell_label.font = fonte_cab_label; cell_label.fill = fill_cab
         cell_label.border = borda; cell_label.alignment = alinhamento_esq
- 
+
         ws.merge_cells(f"C{linha}:G{linha}")
         cell_valor = ws.cell(row=linha, column=3, value=valor)
         cell_valor.font = fonte_cab_valor
         cell_valor.border = borda; cell_valor.alignment = alinhamento_esq
         linha += 1
- 
+
     linha += 1
- 
+
     headers     = ["Seq", "Local.", "Código", "Descrição", "UN", "Quantidade"]
     col_widths  = [6, 14, 12, 52, 8, 12]
     col_letters = ["A", "B", "C", "D", "E", "F"]
- 
+
     for i, h in enumerate(headers):
         cell = ws.cell(row=linha, column=i + 1, value=h)
         cell.font = fonte_header; cell.fill = fill_header
         cell.border = borda; cell.alignment = alinhamento_centro
     ws.row_dimensions[linha].height = 18
     linha += 1
- 
+
     for idx, item in enumerate(itens):
         fill_atual = fill_item_alt if idx % 2 == 0 else None
         valores = [
@@ -873,16 +828,16 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
                 cell.fill = fill_atual
         ws.row_dimensions[linha].height = 15
         linha += 1
- 
+
     for col_letter, width in zip(col_letters, col_widths):
         ws.column_dimensions[col_letter].width = width
     ws.column_dimensions["G"].width = 5
- 
+
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     return output.getvalue()
- 
+
  
 # ===========================================================================
 # INICIALIZAÇÃO

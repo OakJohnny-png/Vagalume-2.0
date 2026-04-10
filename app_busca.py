@@ -1,6 +1,3 @@
-
-Copiar
-
 # =============================================================================
 #  Lúmen Bot — NEMA
 #  A inteligência que acende a sua obra

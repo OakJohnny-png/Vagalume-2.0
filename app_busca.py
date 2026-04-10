@@ -181,7 +181,7 @@ def mostrar_login():
             font-size: 1.1rem !important;
             border-radius: 10px !important;
             border: none !important;
-            width: 100% !important;
+            width: 50% !important;
             padding: 0.7rem !important;
         }
 

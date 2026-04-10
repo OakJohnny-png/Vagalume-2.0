@@ -185,38 +185,24 @@ def mostrar_login():
     """, unsafe_allow_html=True)
 
     # Header centralizado
-    st.markdown("""
-    <div style='text-align:center; padding: 2.5rem 1rem 1rem 1rem;'>
-
-        <!-- Logo NEMA -->
-        <div style='display:inline-block; border: 3px solid white;
-                    padding: 10px 20px 10px 20px; position:relative;'>
-            <div style='height:3px; background:white; margin-bottom:5px; border-radius:1px;'></div>
-            <div style='height:3px; background:white; margin-bottom:8px; border-radius:1px;'></div>
-            <span style='color:white; font-size:2.4rem; font-weight:900; letter-spacing:5px;
-                         font-family: Arial Black, Impact, sans-serif; display:block;
-                         line-height:1; text-transform:uppercase;'>Nema</span>
-            <div style='height:3px; background:white; margin-top:8px; border-radius:1px;'></div>
-        </div>
-
-        <!-- Título -->
-        <h1 style='color:white; font-size:clamp(2rem,8vw,3.2rem); font-weight:900;
-                   margin:1.5rem 0 0.4rem 0; letter-spacing:2px;
-                   font-family: Arial Black, sans-serif;'>
-            LÚMEN BOT
-        </h1>
-        <p style='color:white; font-size:clamp(0.85rem,3vw,1rem); margin:0 0 1.5rem 0;
-                  font-style:italic; opacity:0.9;'>
-            A inteligência que acende a sua obra.
-        </p>
-
-        <!-- Botão Login decorativo -->
-        <span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;
-                     padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>
-            Login
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:center; padding: 2.5rem 1rem 1rem 1rem;'>"
+        "<div style='display:inline-block; border: 3px solid white; padding: 10px 20px; position:relative;'>"
+        "<div style='height:3px; background:white; margin-bottom:5px; border-radius:1px;'></div>"
+        "<div style='height:3px; background:white; margin-bottom:8px; border-radius:1px;'></div>"
+        "<span style='color:white; font-size:2.4rem; font-weight:900; letter-spacing:5px;"
+        " font-family: Arial Black, Impact, sans-serif; display:block; line-height:1; text-transform:uppercase;'>Nema</span>"
+        "<div style='height:3px; background:white; margin-top:8px; border-radius:1px;'></div>"
+        "</div>"
+        "<h1 style='color:white; font-size:clamp(2rem,8vw,3.2rem); font-weight:900;"
+        " margin:1.5rem 0 0.4rem 0; letter-spacing:2px; font-family: Arial Black, sans-serif;'>LÚMEN BOT</h1>"
+        "<p style='color:white; font-size:clamp(0.85rem,3vw,1rem); margin:0 0 1.5rem 0;"
+        " font-style:italic; opacity:0.9;'>A inteligência que acende a sua obra.</p>"
+        "<span style='background:#FEA700; color:#000; font-weight:700; font-size:1.1rem;"
+        " padding: 0.6rem 2.5rem; border-radius:10px; display:inline-block;'>Login</span>"
+        "</div>",
+        unsafe_allow_html=True
+    )
 
     # Área central do formulário
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)

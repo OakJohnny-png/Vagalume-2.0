@@ -213,7 +213,7 @@ def mostrar_login():
     with col_titulo:
         st.markdown("""
         <div style='padding: 1.5rem 0 0 0;'>
-            <h1 style='color:white; font-size:clamp(1.8rem,5vw,3rem); font-weight:900;
+            <h1 style='color:white; text-align: center; font-size:clamp(1.8rem,5vw,3rem); font-weight:900;
                        margin:0; letter-spacing:1px; font-family: Arial Black, sans-serif;'>
                 LÚMEN BOT
             </h1>

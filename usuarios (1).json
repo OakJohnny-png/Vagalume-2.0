@@ -1,0 +1,8 @@
+{
+    "admin": {
+        "nome": "Administrador",
+        "senha_hash": "$2b$12$JT7L/mi9ix6AdnewWRgE0.ppDsbjg9fXhFzjUpkfkqmLMKAW3zwJ.",
+        "perfil": "admin",
+        "ativo": true
+    }
+}

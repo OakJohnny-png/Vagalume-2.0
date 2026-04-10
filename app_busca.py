@@ -158,19 +158,6 @@ def mostrar_login():
             padding: 0.6rem 1rem !important;
         }
 
-        /* Botão de login amarelo */
-        div[data-testid="stForm"] button[kind="primaryFormSubmit"],
-        div[data-testid="stForm"] button {
-            background-color: #FEA700 !important;
-            color: #000 !important;
-            font-weight: 700 !important;
-            font-size: 1.1rem !important;
-            border-radius: 10px !important;
-            border: none !important;
-            width: 100% !important;
-            padding: 0.7rem !important;
-        }
-
         /* Mensagem de erro */
         .login-erro {
             color: #fff;

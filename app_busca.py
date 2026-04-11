@@ -236,13 +236,13 @@ def mostrar_login():
     """, unsafe_allow_html=True)
 
     # ---- Logo + Branding ----
-    logo_path = os.path.join(BASE_DIR, "logo.svg")
+    logo_path = os.path.join(BASE_DIR, "logo.png")
     logo_b64 = ""
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
     if logo_b64:
-        logo_html = f'<img src="data:image/svg;base64,{logo_b64}" style="width:70px; height:70px; object-fit:contain;" />'
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:70px; height:70px; object-fit:contain;" />'
     else:
         logo_html = '<span style="font-size:2.8rem;">💡</span>'
     st.markdown(f"""

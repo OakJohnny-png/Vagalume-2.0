@@ -320,17 +320,14 @@ def mostrar_login():
                     background-color:#1f2937;
                     border: 1px solid #374151;
                     box-shadow: 0 0 32px rgba(34,211,238,0.08);
-                    margin-bottom: 1rem;">
-            {logo_html}
+                    margin-bottom: 1rem;"> {logo_html}
         </div>
         <h1 style="text-align:center; color:#ffffff; font-size:1.9rem; font-weight:800;
                    letter-spacing:0.25em; text-transform:uppercase;
                    margin:0; font-family:'Inter',sans-serif;">AXION</h1>
         <p style="text-align:center; color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
                   text-transform:uppercase; margin:0.3rem 0 0 0;
-                  font-weight:500;">
-            A tecnologia que move as operações
-        </p>
+                  font-weight:500;">A tecnologia que move as operações</p>
     </div>
     """, unsafe_allow_html=True)
 

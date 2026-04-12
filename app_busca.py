@@ -323,10 +323,10 @@ def mostrar_login():
                     margin-bottom: 1rem;">
             {logo_html}
         </div>
-        <h1 style="color:#ffffff; font-size:1.9rem; font-weight:800;
+        <h1 style="text-align:center; color:#ffffff; font-size:1.9rem; font-weight:800;
                    letter-spacing:0.25em; text-transform:uppercase;
                    margin:0; font-family:'Inter',sans-serif;">AXION</h1>
-        <p style="color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
+        <p style="text-align:center; color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
                   text-transform:uppercase; margin:0.3rem 0 0 0;
                   font-weight:500;">
             A tecnologia que move as operações

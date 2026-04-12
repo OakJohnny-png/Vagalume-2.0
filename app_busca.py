@@ -39,7 +39,7 @@ except ImportError:
 # Configuração global da página
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Lúmen Bot — NEMA",
+    page_title="AXION — NEMA",
     page_icon="💡",
     layout="wide",
 )
@@ -326,7 +326,7 @@ def mostrar_login():
         <h1 style="color:#ffffff; font-size:1.9rem; font-weight:800;
                    letter-spacing:0.25em; text-transform:uppercase;
                    margin:0; font-family:'Inter',sans-serif;">
-            Lumen Control
+            AXOON
         </h1>
         <p style="color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
                   text-transform:uppercase; margin:0.3rem 0 0 0;
@@ -338,8 +338,8 @@ def mostrar_login():
 
     # ---- Formulário de login ----
     with st.form("form_login", clear_on_submit=False):
-        usuario_input = st.text_input("Node Identity", placeholder="Usuário", key="login_usuario")
-        senha_input   = st.text_input("Access Key", type="password", placeholder="••••••••", key="login_senha")
+        usuario_input = st.text_input("", placeholder="Usuário", key="login_usuario")
+        senha_input   = st.text_input("", type="password", placeholder="SENHA", key="login_senha")
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         entrar = st.form_submit_button("Iniciar Sessão", use_container_width=True)
 
@@ -370,7 +370,7 @@ def mostrar_login():
                     margin:0 auto 1rem auto;"></div>
         <p style="font-size:0.55rem; text-transform:uppercase; letter-spacing:0.2em;
                   font-weight:700; color:#6b7280;">
-            Lumen Systems &bull; NEMA Tecnologia &bull; Rio do Sul, SC
+            AXION &bull; NEMA Tecnologia &bull; Rio do Sul, SC
         </p>
     </div>
     """, unsafe_allow_html=True)

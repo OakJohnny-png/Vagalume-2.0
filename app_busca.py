@@ -310,7 +310,7 @@ def mostrar_login():
         with open(logo_path, "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
     if logo_b64:
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:70px; height:70px; object-fit:contain;" />'
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:100px; height:100px; object-fit:contain;" />'
     else:
         logo_html = '<span style="font-size:2.8rem;">💡</span>'
     st.markdown(f"""
@@ -325,13 +325,11 @@ def mostrar_login():
         </div>
         <h1 style="color:#ffffff; font-size:1.9rem; font-weight:800;
                    letter-spacing:0.25em; text-transform:uppercase;
-                   margin:0; font-family:'Inter',sans-serif;">
-            AXOON
-        </h1>
+                   margin:0; font-family:'Inter',sans-serif;">AXION</h1>
         <p style="color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
                   text-transform:uppercase; margin:0.3rem 0 0 0;
                   font-weight:500;">
-            NEMA &bull; Acesso Seguro
+            A tecnologia que move as operações
         </p>
     </div>
     """, unsafe_allow_html=True)

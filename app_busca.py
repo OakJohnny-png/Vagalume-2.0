@@ -600,11 +600,12 @@ def listar_historico() -> list:
 # ---------------------------------------------------------------------------
 
 ROUTES = {
-    "ROTA 1": ["CENTRO", "JARDIM AMERICA"],
+  "ROTA 1": ["CENTRO", "JARDIM AMERICA"],
     "ROTA 2": ["ALBERTINA", "LARANJEIRAS", "BOA VISTA", "EUGENIO SCHNEIDER"],
     "ROTA 3": ["FUNDO CANOAS", "CANOAS", "PROGRESSO", "PAMPLONA", "CANTA GALO"],
-    "ROTA 4": ["BELA VISTA", "VILA NOVA", "BAIRRO NOVO", "JARDIM ESPERANÇA"],
-    "ROTA 5": ["INDUSTRIAL", "JARDIM INDUSTRIAL", "ZONA INDUSTRIAL"],
+    "ROTA 4": ["BARRA DO TROMBUDO", "BARRAGEM", "BUDAG", "SUMARRE"],
+    "ROTA 5": ["SANTANA", "TABOAO", "BREMER", "BELA ALIANCA"],
+    "ROTA 6": ["BARRA DA ITOUPAVA","NAVEGANTES", "SANTA RITA", "VALADA ITOUPAVA", "VALADA SAO PAULO", "RAINHA"],
 }
 
 
@@ -1143,7 +1144,7 @@ with st.sidebar:
     <div style='text-align:center; padding: 1rem 0 0.5rem 0;'>
         <span style='font-size:2.5rem;'>💡</span>
         <h2 style='color:#22d3ee; margin:0.2rem 0 0 0; font-size:1.4rem;
-                   font-weight:800; letter-spacing:0.1em; text-transform:uppercase;'>Lúmen Bot</h2>
+                   font-weight:800; letter-spacing:0.1em; text-transform:uppercase;'>AXION</h2>
         <p style='color:#6b7280; font-size:0.75rem; margin:0; font-style:italic;'>
             A inteligência que acende a sua obra
         </p>

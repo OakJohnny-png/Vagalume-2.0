@@ -310,7 +310,7 @@ def mostrar_login():
         with open(logo_path, "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
     if logo_b64:
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:100px; height:100px; object-fit:contain;" />'
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width:400px; height:400px; object-fit:contain;" />'
     else:
         logo_html = '<span style="font-size:2.8rem;">💡</span>'
     st.markdown(f"""

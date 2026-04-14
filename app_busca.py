@@ -1,5 +1,5 @@
 # =============================================================================
-#  Lúmen Bot — NEMA
+#  AXIONLog — NEMA
 #  A inteligência que acende a sua obra
 #  + Processador de Chamados de Iluminação Pública
 #  + Solicitação de Materiais (Manual e via PDF)
@@ -39,7 +39,7 @@ except ImportError:
 # Configuração global da página
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="AXION — NEMA",
+    page_title="AXIONLOg — NEMA",
     page_icon="💡",
     layout="wide",
 )
@@ -897,7 +897,7 @@ def exportar_requisicao_excel(cabecalho: dict, itens: list) -> bytes:
     linha = 1
 
     ws.merge_cells(f"A{linha}:G{linha}")
-    cell = ws.cell(row=linha, column=1, value="SOLICITAÇÃO DE MATERIAIS — LÚMEN BOT / NEMA")
+    cell = ws.cell(row=linha, column=1, value="SOLICITAÇÃO DE MATERIAIS — AXIONLog / NEMA")
     cell.font = fonte_titulo; cell.fill = fill_titulo
     cell.alignment = alinhamento_centro
     ws.row_dimensions[linha].height = 22
@@ -1198,7 +1198,7 @@ if pagina == "🏠 Início":
     <div style='text-align:center; padding: 3rem 1rem 1.5rem 1rem;'>
         <span style='font-size:4rem;'>💡</span>
         <h1 style='font-size:clamp(2rem, 8vw, 4rem); color:#22d3ee; margin: 0.3rem 0 0 0;
-                   font-weight:800; letter-spacing:0.15em; text-transform:uppercase;'>Lúmen Bot</h1>
+                   font-weight:800; letter-spacing:0.15em; text-transform:uppercase;'>AXIONLog</h1>
         <p style='font-size:clamp(0.9rem, 3vw, 1.2rem); color:#6b7280; margin:0.5rem 0 0 0;
                   font-style:italic;'>A inteligência que acende a sua obra</p>
         <p style='font-size:clamp(0.75rem, 2.5vw, 0.95rem); color:#4b5563; margin:0.3rem 0 0 0;

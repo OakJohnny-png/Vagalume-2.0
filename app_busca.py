@@ -363,8 +363,9 @@ def mostrar_login():
     <div style="text-align:center; margin-top:3rem; opacity:0.4;">
         <div style="width:48px; height:2px; background:linear-gradient(to right, #2563eb, #22d3ee); border-radius:9999px;
                     margin:0 auto 1rem auto;"></div>
-        <p style="font-size:0.55rem; text-transform:uppercase; letter-spacing:0.2em;
-                  font-weight:700; color:#6b7280;">
+        <p style="text-align:center; color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
+                  text-transform:uppercase; margin:0.3rem 0 0 0;
+                  font-weight:500;">
             AXIONLOg &bull; NEMA Tecnologia &bull; Rio do Sul, SC
         </p>
     </div>

@@ -324,7 +324,7 @@ def mostrar_login():
         </div>
         <h1 style="text-align:center; color:#ffffff; font-size:1.9rem; font-weight:800;
                    letter-spacing:0.25em; text-transform:uppercase;
-                   margin:0; font-family:'Inter',sans-serif;">AXION</h1>
+                   margin:0; font-family:'Inter',sans-serif;">AXIONLOg</h1>
         <p style="text-align:center; color:#22d3ee; font-size:0.65rem; letter-spacing:0.2em;
                   text-transform:uppercase; margin:0.3rem 0 0 0;
                   font-weight:500;">A tecnologia que move as operações</p>
@@ -365,7 +365,7 @@ def mostrar_login():
                     margin:0 auto 1rem auto;"></div>
         <p style="font-size:0.55rem; text-transform:uppercase; letter-spacing:0.2em;
                   font-weight:700; color:#6b7280;">
-            AXION &bull; NEMA Tecnologia &bull; Rio do Sul, SC
+            AXIONLOg &bull; NEMA Tecnologia &bull; Rio do Sul, SC
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1144,7 +1144,7 @@ with st.sidebar:
     <div style='text-align:center; padding: 1rem 0 0.5rem 0;'>
         <span style='font-size:2.5rem;'>💡</span>
         <h2 style='color:#22d3ee; margin:0.2rem 0 0 0; font-size:1.4rem;
-                   font-weight:800; letter-spacing:0.1em; text-transform:uppercase;'>AXION</h2>
+                   font-weight:800; letter-spacing:0.1em; text-transform:uppercase;'>AXIONLog</h2>
         <p style='color:#6b7280; font-size:0.75rem; margin:0; font-style:italic;'>
             A inteligência que acende a sua obra
         </p>
